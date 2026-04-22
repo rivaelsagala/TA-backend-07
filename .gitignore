@@ -1,0 +1,59 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Environment Variables
+.env
+
+notebooks/
+
+# Data directories (exclude actual files but keep structure)
+.data
+data/chroma_db/
+data/raw/*.pdf
+data/raw/*.docx
+data/raw/*.txt
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Logs
+logs/
+!logs/.gitkeep
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# PyCharm / VS Code
+.idea/
+.vscode/
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+test_*.pdf
+test_*.txt
+*_test.*
+
+# Model files (if downloaded locally)
+models/
+*.bin
+*.safetensors
+
+# Distribution / Packaging
+dist/
+build/
+*.egg-info/
