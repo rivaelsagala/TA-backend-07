@@ -48,6 +48,11 @@ psycopg2-binary==2.9.11
 
 # ----- Configuration & Logging -----
 python-dotenv==1.0.1
+loguru==0.7.3
+
+# ----- RAGAS Evaluation Framework -----
+ragas==0.2.14
+datasets==3.2.0
 
 # ----- Evaluation (RAGAS) -----
 ragas==0.1.19
@@ -59,8 +64,8 @@ pydantic-core==2.41.5
 loguru==0.7.3
 
 # ----- Evaluation & Testing -----
-ragas==0.1.14
-datasets==4.5.0
+# ragas==0.1.14
+# datasets==4.5.0
 
 # ----- Utilities -----
 tqdm==4.67.1
