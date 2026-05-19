@@ -40,3 +40,6 @@ loguru==0.7.3
 
 tqdm==4.67.1
 httpx==0.28.1
+
+
+gunicorn==23.0.0
