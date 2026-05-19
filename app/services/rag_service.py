@@ -22,12 +22,19 @@ embeddings = OpenAIEmbeddings(
 # 2. HUGGINGFACE SERVICE (LLM Llama 3.1 8B)
 # ==========================================
 class HuggingFaceService:
-    """Service untuk berinteraksi dengan HuggingFace Router API"""
+    """Service untuk berinteraksi dengan HuggingFace Router API dan Fine-tuned Model"""
     
     def __init__(self):
+        # HuggingFace Router API (Model belum fine-tuned)
         self.api_url = settings.hf_api_url
         self.token = settings.hf_token
         self.model = settings.hf_llm_model
+        
+        # Fine-tuned Model API (B200 Server)
+        self.finetuned_api_url = settings.finetuned_api_url
+        self.finetuned_model_name = settings.finetuned_model_name
+        
+        # Common settings
         self.temperature = settings.llm_temperature
         self.max_tokens = settings.llm_max_tokens
         
@@ -36,48 +43,133 @@ class HuggingFaceService:
             "Content-Type": "application/json"
         }
     
-    def query(self, messages: List[Dict[str, str]], **kwargs) -> Optional[Dict[str, Any]]:
-        """Kirim query ke HuggingFace Router API"""
+    def load_finetuned_model(self) -> bool:
+        """Load model fine-tuned ke memori server B200"""
         try:
-            payload = {
-                "model": self.model,
-                "messages": messages,
-                "temperature": kwargs.get("temperature", self.temperature),
-                "max_tokens": kwargs.get("max_tokens", self.max_tokens),
-            }
+            load_url = f"{self.finetuned_api_url}/load-model"
+            logger.info(f"Loading fine-tuned model via: {load_url}")
             
-            logger.debug(f"Sending request to HuggingFace API: {self.api_url}")
-            
-            response = requests.post(
-                self.api_url,
-                headers=self.headers,
-                json=payload,
-                timeout=30
-            )
-            
+            response = requests.post(load_url, timeout=60)
             response.raise_for_status()
             result = response.json()
             
-            logger.info("✅ HuggingFace API response successful")
-            return result
+            if result.get("status") == "success":
+                logger.info(f"✅ Fine-tuned model loaded: {result.get('message')}")
+                return True
+            else:
+                logger.warning(f"⚠️ Model load response: {result}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error loading fine-tuned model: {str(e)}")
+            return False
+    
+    def query(self, messages: List[Dict[str, str]], use_finetuned: bool = False, **kwargs) -> Optional[Dict[str, Any]]:
+        """
+        Kirim query ke HuggingFace Router API atau Fine-tuned Model API
+        
+        Args:
+            messages: List of message dictionaries
+            use_finetuned: True untuk menggunakan model fine-tuned, False untuk model original
+            **kwargs: Additional parameters
+        """
+        try:
+            if use_finetuned:
+                # Gunakan Fine-tuned Model API (B200 Server)
+                api_url = f"{self.finetuned_api_url}/chat"
+                logger.debug(f"🔥 Using FINE-TUNED model: {self.finetuned_model_name}")
+                
+                # Extract user message dari messages array
+                user_message = ""
+                for msg in messages:
+                    if msg.get("role") == "user":
+                        user_message = msg.get("content", "")
+                        break
+                
+                # Format payload untuk B200 API: hanya butuh "message"
+                payload = {
+                    "message": user_message
+                }
+                
+                logger.debug(f"Sending request to B200: {api_url}")
+                logger.debug(f"Payload: {payload}")
+                
+                response = requests.post(
+                    api_url,
+                    headers={"Content-Type": "application/json"},
+                    json=payload,
+                    timeout=30
+                )
+                
+                response.raise_for_status()
+                result = response.json()
+                
+                # Format response dari B200 ke format standar
+                # B200 response: {"answer": "...", "message": "..."}
+                # Convert ke format: {"choices": [{"message": {"content": "..."}}]}
+                standardized_result = {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": result.get("answer", "")
+                            }
+                        }
+                    ]
+                }
+                
+                logger.info(f"✅ Fine-tuned Model API response successful")
+                return standardized_result
+                
+            else:
+                # Gunakan HuggingFace Router API (model original)
+                api_url = self.api_url
+                logger.debug(f"📦 Using ORIGINAL model: {self.model}")
+                
+                payload = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": kwargs.get("temperature", self.temperature),
+                    "max_tokens": kwargs.get("max_tokens", self.max_tokens),
+                }
+                
+                logger.debug(f"Sending request to HuggingFace: {api_url}")
+                
+                response = requests.post(
+                    api_url,
+                    headers=self.headers,
+                    json=payload,
+                    timeout=30
+                )
+                
+                response.raise_for_status()
+                result = response.json()
+                
+                logger.info(f"✅ Original Model API response successful")
+                return result
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"❌ HuggingFace API Error: {str(e)}")
+            logger.error(f"❌ LLM API Error: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_detail = e.response.json()
+                    logger.error(f"Error detail: {error_detail}")
+                except:
+                    logger.error(f"Error response text: {e.response.text}")
             return None
         except Exception as e:
             logger.error(f"❌ Unexpected error in query(): {str(e)}")
             return None
     
-    def get_completion(self, messages: List[Dict[str, str]], **kwargs) -> Optional[str]:
+    def get_completion(self, messages: List[Dict[str, str]], use_finetuned: bool = False, **kwargs) -> Optional[str]:
         """Dapatkan completion text dari messages"""
-        response = self.query(messages, **kwargs)
+        response = self.query(messages, use_finetuned=use_finetuned, **kwargs)
         
         if response and "choices" in response and len(response["choices"]) > 0:
             choice = response["choices"][0]
             if "message" in choice and "content" in choice["message"]:
                 return choice["message"]["content"]
         
-        logger.warning("No valid response content from HuggingFace API")
+        logger.warning("No valid response content from LLM API")
         return None
     
     def chat_with_context(
@@ -85,9 +177,18 @@ class HuggingFaceService:
         user_question: str,
         context: str,
         system_prompt: Optional[str] = None,
+        use_finetuned: bool = False,
         **kwargs
     ) -> Optional[str]:
-        """Chat dengan context (untuk RAG)"""
+        """
+        Chat dengan context (untuk RAG)
+        
+        Args:
+            user_question: Pertanyaan user
+            context: Konteks dokumen
+            system_prompt: Custom system prompt (optional)
+            use_finetuned: True untuk model fine-tuned, False untuk model original
+        """
         if not system_prompt:
             system_prompt = (
                 "Kamu adalah asisten AI yang ahli dalam menganalisis dokumen hukum dan Peraturan Desa. "
@@ -105,42 +206,22 @@ class HuggingFaceService:
             {"role": "user", "content": user_question}
         ]
         
-        logger.info(f"Calling HuggingFace API with question: {user_question[:50]}...")
-        return self.get_completion(messages, **kwargs)
+        model_type = "Fine-tuned" if use_finetuned else "Original"
+        logger.info(f"Calling {model_type} Model API with question: {user_question[:50]}...")
+        return self.get_completion(messages, use_finetuned=use_finetuned, **kwargs)
 
 # Singleton instance
 hf_service = HuggingFaceService()
 
-# ==========================================
-# 3. RAG CORE FUNCTIONS
-# ==========================================
-def retrieve_documents_only(query: str) -> list:
-    """
-    Fungsi khusus untuk testing RAG retrieval.
-    Hanya mengambil chunk yang relevan dari vector database.
-    """
-    vector_store = SupabaseVectorStore(
-        client=supabase,
-        embedding=embeddings,
-        table_name=settings.supabase_table_name,
-        query_name="match_documents"
-    )
-    
-    docs = vector_store.similarity_search(query, k=settings.top_k_results)
-    
-    results = []
-    for doc in docs:
-        results.append({
-            "content": doc.page_content,
-            "metadata": doc.metadata
-        })
-        
-    return results
 
-def get_answer_from_rag(query: str) -> dict:
+def get_answer_from_rag(query: str, use_finetuned_model: bool = False) -> dict:
     """
     Mengeksekusi full pipeline RAG: Retrieve context dari Supabase
-    lalu generate jawaban menggunakan HuggingFace Llama 3.1.
+    lalu generate jawaban menggunakan HuggingFace Llama 3.1 atau Fine-tuned Model.
+    
+    Args:
+        query: Pertanyaan user
+        use_finetuned_model: True untuk menggunakan model fine-tuned, False untuk model original
     """
     # 1. Setup Vector Store sebagai Retriever
     vector_store = SupabaseVectorStore(
@@ -163,29 +244,22 @@ def get_answer_from_rag(query: str) -> dict:
     # Gabungkan semua teks konteks dengan pemisah yang jelas
     context_joined = "\n\n---\n\n".join(context_texts)
 
-    # 4. Buat System Prompt khusus dengan instruksi Peraturan Desa
-    system_prompt = (
-        "Kamu adalah asisten AI yang ahli dalam menganalisis dokumen hukum dan Peraturan Desa. "
-        "Gunakan HANYA informasi dari dokumen konteks di bawah ini untuk menjawab pertanyaan pengguna. "
-        "Konteks ini berasal dari beberapa dokumen PDF yang berbeda. Perhatikan baik-baik bagian 'Sumber Dokumen'.\n\n"
-        "Aturan menjawab:\n"
-        "1. Jika jawabannya ada di dokumen yang berbeda, sebutkan perbedaannya dengan jelas.\n"
-        "2. Wajib menyebutkan nama dokumen sumber di akhir jawabanmu (misal: 'Berdasarkan Peraturan Desa No...').\n"
-        "3. Jika jawaban tidak ditemukan di dalam konteks, katakan dengan jujur bahwa kamu tidak menemukan jawabannya di dokumen yang ada. Jangan mengarang bebas.\n\n"
-        f"Konteks Dokumen:\n{context_joined}"
-    )
-
-    # 5. Dapatkan jawaban dari LLM HuggingFace
+    # 4. Dapatkan jawaban dari LLM (Original atau Fine-tuned)
+    # System prompt sudah di-handle oleh chat_with_context() dengan default yang sesuai
+    model_type = "Fine-tuned" if use_finetuned_model else "Original"
+    logger.info(f"🤖 Using {model_type} Model for RAG")
+    
     answer = hf_service.chat_with_context(
         user_question=query,
         context=context_joined,
-        system_prompt=system_prompt
+        use_finetuned=use_finetuned_model
     )
     
-    # Fallback jika API HuggingFace gagal atau mengembalikan None
+    # Fallback jika API gagal atau mengembalikan None
     final_answer = answer if answer else "Maaf, terjadi kesalahan saat mencoba menghasilkan jawaban dari model bahasa."
 
     return {
         "answer": final_answer,
-        "sources": sources
+        "sources": sources,
+        "model_used": model_type
     }

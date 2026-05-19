@@ -33,6 +33,16 @@ class Settings(BaseSettings):
         default="meta-llama/Llama-3.1-8B-Instruct",
         alias="HF_LLM_MODEL"
     )
+    
+    # ---- Fine-tuned Model (Local API on B200 Server) ----
+    finetuned_api_url: str = Field(
+        default="http://localhost:6000/api",
+        alias="FINETUNED_API_URL"
+    )
+    finetuned_model_name: str = Field(
+        default="model_merged_legal",
+        alias="FINETUNED_MODEL_NAME"
+    )
 
     # ---- LLM Model ----
     llm_model: str = Field(default="meta-llama/Llama-3.1-8B-Instruct", alias="LLM_MODEL")
@@ -77,11 +87,8 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(default=200, alias="CHUNK_OVERLAP")
 
     # ---- Retriever ----
-    top_k_results: int = Field(default=10, alias="TOP_K_RESULTS")
+    top_k_results: int = Field(default=2, alias="TOP_K_RESULTS")
 
-    # ---- Evaluation (RAGAS) ----
-    evaluation_enabled: bool = Field(default=True, alias="EVALUATION_ENABLED")
-    evaluation_async: bool = Field(default=False, alias="EVALUATION_ASYNC")
 
     # ---- API / Flask ----
     # api_host: str = Field(default="0.0.0.0", alias="API_HOST")

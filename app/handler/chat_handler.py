@@ -12,11 +12,15 @@ def handle_chat():
     data = request.get_json()
     if not data or 'message' not in data or 'session_id' not in data or 'user_id' not in data:
         return jsonify({"error": "Format request salah. Butuh message, session_id, dan user_id"}), 400
-        
+    
+    # Parameter untuk memilih model: use_finetuned_model (default: False)
+    use_finetuned_model = data.get('use_finetuned_model', False)
+    
     response_data, status_code = chat_with_history(
         session_id=data['session_id'],
         user_id=data['user_id'],
-        user_question=data['message']
+        user_question=data['message'],
+        use_finetuned_model=use_finetuned_model
     )
     return jsonify(response_data), status_code
 

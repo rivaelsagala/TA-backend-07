@@ -12,11 +12,13 @@ ENV/
 
 # Environment Variables
 .env
+*.env.*
+setting.py
 
+# Notebooks (includes all checkpoints)
 notebooks/
 
 # Data directories (exclude actual files but keep structure)
-.data
 data/chroma_db/
 data/raw/*.pdf
 data/raw/*.docx
@@ -27,11 +29,11 @@ data/processed/*
 
 # Logs
 logs/
+*.log
 !logs/.gitkeep
 
 # Jupyter Notebooks checkpoints
 .ipynb_checkpoints/
-notebooks/.ipynb_checkpoints/
 
 # PyCharm / VS Code
 .idea/
@@ -40,8 +42,6 @@ notebooks/.ipynb_checkpoints/
 # Temporary files
 *.tmp
 *.temp
-.DS_Store
-Thumbs.db
 
 # Test artifacts
 test_*.pdf
@@ -52,8 +52,26 @@ test_*.txt
 models/
 *.bin
 *.safetensors
+*.gguf
+*.pth
+*.pt
 
 # Distribution / Packaging
 dist/
 build/
 *.egg-info/
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS specific
+.DS_Store
+Thumbs.db
+desktop.ini

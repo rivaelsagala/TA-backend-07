@@ -9,6 +9,10 @@ from app.handler.chat_handler import (
     handle_update_session,
     handle_delete_session
 )
+from app.handler.model_handler import (
+    handle_load_finetuned_model,
+    handle_get_model_info
+)
 
 bp = Blueprint("routes", __name__)
 
@@ -17,6 +21,10 @@ bp.add_url_rule('/api/generate-embedding', 'generate_embedding', handle_generate
 
 # Endpoint Evaluasi RAGAS
 # bp.add_url_rule('/api/evaluate-response', 'evaluate_response', handle_evaluate_response, methods=['POST'])
+
+# Endpoint Model Management
+bp.add_url_rule('/api/load-finetuned-model', 'load_finetuned_model', handle_load_finetuned_model, methods=['POST'])
+bp.add_url_rule('/api/models', 'get_model_info', handle_get_model_info, methods=['GET'])
 
 # Endpoint Chat dan Riwayat Session (Tersimpan di DB)
 bp.add_url_rule('/api/chat', 'chat', handle_chat, methods=['POST'])
