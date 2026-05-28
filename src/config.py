@@ -30,7 +30,8 @@ class Settings(BaseSettings):
         alias="HF_API_URL"
     )
     hf_llm_model: str = Field(
-        default="meta-llama/Llama-3.1-8B-Instruct",
+        # default="meta-llama/Llama-3.1-8B-Instruct",
+        default="Qwen/Qwen2.5-7B-Instruct",
         alias="HF_LLM_MODEL"
     )
     
@@ -45,7 +46,7 @@ class Settings(BaseSettings):
     )
 
     # ---- LLM Model ----
-    llm_model: str = Field(default="meta-llama/Llama-3.1-8B-Instruct", alias="LLM_MODEL")
+    llm_model: str = Field(default="Qwen/Qwen2.5-7B-Instruct", alias="LLM_MODEL")
     llm_temperature: float = Field(default=0.1, alias="LLM_TEMPERATURE")
     llm_max_tokens: int = Field(default=1024, alias="LLM_MAX_TOKENS")
 
@@ -65,7 +66,7 @@ class Settings(BaseSettings):
 
     # ---- Embedding (OpenAI text-embedding-3-small) ----
     embedding_model: str = Field(
-        default="openai/text-embedding-3-small",
+        default="openai/text-embedding-3-large",
         alias="EMBEDDING_MODEL",
     )
     embedding_dim: int = Field(default=1536, alias="EMBEDDING_DIM")
@@ -87,7 +88,7 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(default=200, alias="CHUNK_OVERLAP")
 
     # ---- Retriever ----
-    top_k_results: int = Field(default=2, alias="TOP_K_RESULTS")
+    top_k_results: int = Field(default=5, alias="TOP_K_RESULTS")
 
 
     # ---- API / Flask ----

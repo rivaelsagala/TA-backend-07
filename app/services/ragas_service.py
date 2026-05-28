@@ -6,7 +6,7 @@ from typing import Dict, Any, List
 from loguru import logger
 from datasets import Dataset
 from ragas import evaluate
-from ragas.metrics import faithfulness, answer_relevancy, context_recall
+from ragas.metrics import faithfulness, answer_relevancy, context_precision
 
 # Import library Langchain untuk custom endpoint (Maiarouter)
 from langchain_openai.chat_models import ChatOpenAI
@@ -19,7 +19,23 @@ from src.config import settings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 class RagasEvaluationService:
-    """Service untuk mengevaluasi respons RAG menggunakan RAGAS metrics"""
+    """
+    Service untuk mengevaluasi respons RAG menggunakan RAGAS metrics
+    
+    Metrik yang digunakan:
+    1. Faithfulness (0-1): Mengukur apakah jawaban didukung oleh konteks yang diambil
+       - Input: answer + contexts
+       - Tinggi = jawaban tidak mengarang, semua klaim ada di konteks
+       
+    2. Answer Relevancy (0-1): Mengukur apakah jawaban relevan dengan pertanyaan
+       - Input: question + answer  
+       - Tinggi = jawaban menjawab pertanyaan dengan tepat
+       
+    3. Context Precision (0-1): Mengukur apakah konteks yang diambil relevan dan presisi
+       - Input: question + contexts + ground_truth
+       - Tinggi = konteks yang diambil tepat sasaran, tidak banyak noise
+       - Konteks relevan muncul di ranking atas
+    """
     
     def __init__(self):
         # Konfigurasi Maiarouter API dari settings
@@ -45,7 +61,7 @@ class RagasEvaluationService:
         self.metrics = [
             faithfulness,       # Apakah jawaban didukung oleh konteks
             answer_relevancy,   # Apakah jawaban relevan dengan pertanyaan
-            context_recall      # Apakah retrieval berhasil mengambil info penting
+            context_precision   # Apakah konteks yang diambil relevan dan presisi
         ]
         
         logger.info("✅ RAGAS Evaluation Service initialized")
@@ -64,13 +80,14 @@ class RagasEvaluationService:
             question: Pertanyaan user
             answer: Jawaban dari sistem RAG
             contexts: List konteks yang diambil dari vector database
-            reference: Ground truth answer (opsional, jika tidak ada akan sama dengan answer)
+            reference: Ground truth answer (opsional, untuk context_precision tidak wajib)
         
         Returns:
-            Dictionary berisi hasil evaluasi (faithfulness, answer_relevancy, context_recall)
+            Dictionary berisi hasil evaluasi (faithfulness, answer_relevancy, context_precision)
         """
         try:
-            # Jika reference tidak ada, gunakan answer sebagai reference
+            # Untuk metrik yang digunakan sekarang, reference tidak diperlukan
+            # Tapi tetap disimpan untuk kompatibilitas
             if reference is None:
                 reference = answer
             
@@ -79,7 +96,7 @@ class RagasEvaluationService:
                 "question": [question],
                 "contexts": [contexts],
                 "answer": [answer],
-                "reference": [reference]
+                "ground_truth": [reference]  # RAGAS menggunakan 'ground_truth' bukan 'reference'
             }
             
             eval_dataset = Dataset.from_dict(data_sample)
@@ -102,11 +119,11 @@ class RagasEvaluationService:
             formatted_result = {
                 "faithfulness": float(result_dict.get("faithfulness", 0)),
                 "answer_relevancy": float(result_dict.get("answer_relevancy", 0)),
-                "context_recall": float(result_dict.get("context_recall", 0)),
+                "context_precision": float(result_dict.get("context_precision", 0)),
                 "average_score": float(
                     (result_dict.get("faithfulness", 0) + 
                     result_dict.get("answer_relevancy", 0) + 
-                    result_dict.get("context_recall", 0)) / 3
+                    result_dict.get("context_precision", 0)) / 3
                 )
             }
             
@@ -119,7 +136,7 @@ class RagasEvaluationService:
                 "error": str(e),
                 "faithfulness": 0,
                 "answer_relevancy": 0,
-                "context_recall": 0,
+                "context_precision": 0,
                 "average_score": 0
             }
     

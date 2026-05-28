@@ -49,7 +49,7 @@ class HuggingFaceService:
             load_url = f"{self.finetuned_api_url}/load-model"
             logger.info(f"Loading fine-tuned model via: {load_url}")
             
-            response = requests.post(load_url, timeout=60)
+            response = requests.post(load_url, timeout=900)
             response.raise_for_status()
             result = response.json()
             
@@ -98,7 +98,7 @@ class HuggingFaceService:
                     api_url,
                     headers={"Content-Type": "application/json"},
                     json=payload,
-                    timeout=30
+                    timeout=300
                 )
                 
                 response.raise_for_status()
@@ -138,7 +138,7 @@ class HuggingFaceService:
                     api_url,
                     headers=self.headers,
                     json=payload,
-                    timeout=30
+                    timeout=300
                 )
                 
                 response.raise_for_status()
@@ -148,7 +148,7 @@ class HuggingFaceService:
                 return result
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"❌ LLM API Error: {str(e)}")
+            logger.error(f"LLM API Error: {str(e)}")
             if hasattr(e, 'response') and e.response is not None:
                 try:
                     error_detail = e.response.json()
@@ -190,16 +190,56 @@ class HuggingFaceService:
             use_finetuned: True untuk model fine-tuned, False untuk model original
         """
         if not system_prompt:
-            system_prompt = (
-                "Kamu adalah asisten AI yang ahli dalam menganalisis dokumen hukum dan Peraturan Desa. "
-                "Gunakan HANYA informasi dari dokumen konteks di bawah ini untuk menjawab pertanyaan pengguna. "
-                "Konteks ini berasal dari beberapa dokumen PDF yang berbeda. Perhatikan baik-baik bagian 'Sumber Dokumen'.\n\n"
-                "Aturan menjawab:\n"
-                "1. Jika jawabannya ada di dokumen yang berbeda, sebutkan perbedaannya dengan jelas.\n"
-                "2. Wajib menyebutkan nama dokumen sumber di akhir jawabanmu (misal: 'Berdasarkan Peraturan Desa No...').\n"
-                "3. Jika jawaban tidak ditemukan di dalam konteks, katakan dengan jujur bahwa kamu tidak menemukan jawabannya di dokumen yang ada. Jangan mengarang bebas.\n\n"
-                f"Konteks Dokumen:\n{context}"
+            system_prompt = (f"""
+                    Anda adalah AI Assistant untuk sistem Retrieval-Augmented Generation (RAG) yang bertugas menjawab pertanyaan berdasarkan dokumen yang diberikan.
+
+                    ATURAN UTAMA:
+                    1. Gunakan HANYA informasi yang tersedia pada konteks/dokumen.
+                    2. Jangan menambahkan informasi dari pengetahuan pribadi atau asumsi di luar dokumen.
+                    3. Jika jawaban tidak ditemukan pada konteks, jawab:
+                    "Informasi tidak ditemukan dalam dokumen."
+                    4. Jawaban harus jelas, ringkas, relevan, dan mudah dipahami.
+                    5. Prioritaskan informasi yang paling sesuai dengan pertanyaan pengguna.
+                    6. Jika tersedia, sertakan pasal, poin, atau bagian dokumen yang mendukung jawaban.
+                    7. Jangan membuat interpretasi hukum di luar isi dokumen.
+                    8. Jangan menghasilkan jawaban yang ambigu, spekulatif, atau berhalusinasi.
+                    9. Gunakan Bahasa Indonesia formal dan profesional.
+                    10. Jika pertanyaan meminta daftar atau poin-poin, gunakan format bullet point.
+
+                    FORMAT KERJA:
+                    - Analisis pertanyaan pengguna.
+                    - Identifikasi informasi paling relevan dari konteks.
+                    - Susun jawaban berdasarkan isi dokumen.
+                    - Pastikan jawaban konsisten dengan konteks.
+
+                    CONTOH:
+                    Konteks:
+                    Pasal 3 menjelaskan bahwa tujuan penyelenggaraan pelayanan KIBBLA adalah meningkatkan kualitas pelayanan kesehatan ibu dan anak.
+
+                    Pertanyaan:
+                    Apa tujuan penyelenggaraan pelayanan KIBBLA?
+
+                    Jawaban:
+                    Tujuan penyelenggaraan pelayanan KIBBLA adalah meningkatkan kualitas pelayanan kesehatan ibu dan anak sebagaimana dijelaskan dalam Pasal 3.
+
+                    CONTOH JIKA JAWABAN TIDAK ADA:
+                    Pertanyaan:
+                    Siapa pendiri program KIBBLA?
+
+                    Jawaban:
+                    Informasi tidak ditemukan dalam dokumen.
+
+                    INSTRUKSI TAMBAHAN:
+                    - Fokus pada akurasi jawaban.
+                    - Hindari pengulangan kalimat yang tidak perlu.
+                    - Jangan memberikan opini pribadi.
+                    - Jangan menjawab di luar konteks dokumen yang diberikan.
+
+                    KONTEKS DOKUMEN:
+                    {context}
+                    """
             )
+            
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -229,10 +269,12 @@ def get_answer_from_rag(query: str, use_finetuned_model: bool = False) -> dict:
         embedding=embeddings,
         table_name=settings.supabase_table_name,
         query_name="match_documents"
+        # query_name="match_new_documents"
     )
     
     # 2. Ambil dokumen relevan
     docs = vector_store.similarity_search(query, k=settings.top_k_results)
+    # docs = []
     
     # 3. Ekstrak konteks dan format sumber dokumen
     context_texts = []

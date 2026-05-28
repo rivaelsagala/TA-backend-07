@@ -19,21 +19,14 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, use_fin
         logger.info(f"Processing chat for user {user_id}, session {session_id} with {model_type} model")
         
         # 1. Ambil riwayat chat sebelumnya agar AI mengingat percakapan sesi ini
-        history_messages = chat_history_service.get_formatted_chat_messages(session_id)
+        # CATATAN: History tidak digunakan untuk RAG query agar tidak bias hasil retrieval
+        # history_messages = chat_history_service.get_formatted_chat_messages(session_id)
         
-        # 2. Jika ada history, gabungkan dengan pertanyaan saat ini
-        if history_messages:
-            # Format pertanyaan dengan konteks history untuk RAG
-            contextual_question = f"Riwayat percakapan sebelumnya:\n"
-            for msg in history_messages[-4:]:  # Ambil 4 pesan terakhir saja
-                role = "User" if msg["role"] == "user" else "Assistant"
-                contextual_question += f"{role}: {msg['content']}\n"
-            contextual_question += f"\nPertanyaan saat ini: {user_question}"
-        else:
-            contextual_question = user_question
+        # 2. Gunakan pertanyaan ASLI untuk RAG (tanpa history)
+        # Ini memastikan retrieval tidak terpengaruh oleh jawaban sebelumnya
         
         # 3. Gunakan get_answer_from_rag dengan pilihan model
-        rag_result = get_answer_from_rag(contextual_question, use_finetuned_model=use_finetuned_model)
+        rag_result = get_answer_from_rag(user_question, use_finetuned_model=use_finetuned_model)
         
         if not rag_result or not rag_result.get("answer"):
             return {"status": "error", "message": "Gagal mendapatkan respons dari sistem RAG"}, 500
