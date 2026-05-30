@@ -77,7 +77,7 @@ class HuggingFaceService:
             if use_finetuned:
                 # Gunakan Fine-tuned Model API (B200 Server)
                 api_url = f"{self.finetuned_api_url}/chat"
-                logger.debug(f"🔥 Using FINE-TUNED model: {self.finetuned_model_name}")
+                logger.debug(f"FINE-TUNED model: {self.finetuned_model_name}")
                 
                 # Extract user message dari messages array
                 user_message = ""
@@ -117,13 +117,13 @@ class HuggingFaceService:
                     ]
                 }
                 
-                logger.info(f"✅ Fine-tuned Model API response successful")
+                logger.info(f"Fine-tuned Model API response successful")
                 return standardized_result
                 
             else:
                 # Gunakan HuggingFace Router API (model original)
                 api_url = self.api_url
-                logger.debug(f"📦 Using ORIGINAL model: {self.model}")
+                logger.debug(f"Using ORIGINAL model: {self.model}")
                 
                 payload = {
                     "model": self.model,
@@ -144,7 +144,7 @@ class HuggingFaceService:
                 response.raise_for_status()
                 result = response.json()
                 
-                logger.info(f"✅ Original Model API response successful")
+                logger.info(f"Model API response successful")
                 return result
             
         except requests.exceptions.RequestException as e:
@@ -289,7 +289,7 @@ def get_answer_from_rag(query: str, use_finetuned_model: bool = False) -> dict:
     # 4. Dapatkan jawaban dari LLM (Original atau Fine-tuned)
     # System prompt sudah di-handle oleh chat_with_context() dengan default yang sesuai
     model_type = "Fine-tuned" if use_finetuned_model else "Original"
-    logger.info(f"🤖 Using {model_type} Model for RAG")
+    logger.info(f"Using {model_type} Model for RAG")
     
     answer = hf_service.chat_with_context(
         user_question=query,

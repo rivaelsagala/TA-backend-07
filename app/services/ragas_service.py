@@ -64,7 +64,7 @@ class RagasEvaluationService:
             context_precision   # Apakah konteks yang diambil relevan dan presisi
         ]
         
-        logger.info("✅ RAGAS Evaluation Service initialized")
+        logger.info("RAGAS Evaluation Service initialized")
     
     def evaluate_single_response(
         self,
@@ -127,11 +127,11 @@ class RagasEvaluationService:
                 )
             }
             
-            logger.info(f"✅ Evaluation completed: {formatted_result}")
+            logger.info(f"Evaluation completed: {formatted_result}")
             return formatted_result
             
         except Exception as e:
-            logger.error(f"❌ Error during RAGAS evaluation: {str(e)}")
+            logger.error(f"Error during RAGAS evaluation: {str(e)}")
             return {
                 "error": str(e),
                 "faithfulness": 0,
