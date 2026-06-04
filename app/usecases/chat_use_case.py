@@ -4,7 +4,7 @@ from app.services.rag_service import get_answer_from_rag
 from app.services import chat_history_service
 from app.services.ragas_service import ragas_service
 
-def chat_with_history(session_id: int, user_id: int, user_question: str, use_finetuned_model: bool = False) -> Tuple[Dict[str, Any], int]:
+def chat_with_history(session_id: int, user_id: int, user_question: str, model_id: int = 1, reference: str = None) -> Tuple[Dict[str, Any], int]:
     """
     Chat dengan history dan pilihan model
     
@@ -12,11 +12,17 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, use_fin
         session_id: ID sesi chat
         user_id: ID user
         user_question: Pertanyaan user
-        use_finetuned_model: True untuk model fine-tuned, False untuk model original
+        model_id: ID model yang akan digunakan (1-4)
+            1: meta-llama/Llama-3.1-8B-Instruct
+            2: Qwen/Qwen2.5-7B-Instruct
+            3: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+            4: model_merged_legal (fine-tuned)
+        reference: Ground truth / jawaban pakar (opsional, untuk evaluasi RAGAS yang valid).
+                   Jika tidak diisi, metrik context_recall, context_entity_recall, dan
+                   noise_sensitivity tidak akan akurat.
     """
     try:
-        model_type = "Fine-tuned" if use_finetuned_model else "Original"
-        logger.info(f"Processing chat for user {user_id}, session {session_id} with {model_type} model")
+        logger.info(f"Processing chat for user {user_id}, session {session_id} with model_id {model_id}")
         
         # 1. Ambil riwayat chat sebelumnya agar AI mengingat percakapan sesi ini
         # CATATAN: History tidak digunakan untuk RAG query agar tidak bias hasil retrieval
@@ -25,30 +31,30 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, use_fin
         # 2. Gunakan pertanyaan ASLI untuk RAG (tanpa history)
         # Ini memastikan retrieval tidak terpengaruh oleh jawaban sebelumnya
         
-        # 3. Gunakan get_answer_from_rag dengan pilihan model
-        rag_result = get_answer_from_rag(user_question, use_finetuned_model=use_finetuned_model)
+        # 3. Gunakan get_answer_from_rag dengan model_id
+        rag_result = get_answer_from_rag(user_question, model_id=model_id)
         
         if not rag_result or not rag_result.get("answer"):
             return {"status": "error", "message": "Gagal mendapatkan respons dari sistem RAG"}, 500
         
         # # 4. Evaluasi respons menggunakan RAGAS
-        # logger.info("Starting RAGAS evaluation...")
-        # contexts = ragas_service.format_contexts_from_sources(rag_result.get("sources", []))
+        logger.info("Starting RAGAS evaluation...")
+        contexts = ragas_service.format_contexts_from_sources(rag_result.get("sources", []))
         
-        # evaluation_result = ragas_service.evaluate_single_response(
-        #     question=user_question,  
-        #     answer=rag_result["answer"],
-        #     contexts=contexts,
-        #     reference=rag_result["answer"] 
-        # )
+        evaluation_result = ragas_service.evaluate_single_response(
+            question=user_question,  
+            answer=rag_result["answer"],
+            contexts=contexts,
+            reference=reference  # None jika tidak dikirim dari Postman (akan trigger warning)
+        )
         
-        # logger.info(f"RAGAS Evaluation: {evaluation_result}")
+        logger.info(f"RAGAS Evaluation: {evaluation_result}")
             
         # 5. Simpan Pertanyaan dan Jawaban ke dalam PostgreSQL (chat_history)
         metadata = {
             "sources": rag_result.get("sources", []),
-            # "evaluation": evaluation_result,
-            "model_used": rag_result.get("model_used", model_type)
+            "evaluation": evaluation_result,
+            "model_used": rag_result.get("model_used", "Unknown Model")
         }
         chat_history_service.save_chat_message(
             session_id=session_id, 
@@ -63,8 +69,8 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, use_fin
             "message": "Jawaban berhasil diproses",
             "answer": rag_result["answer"],
             "sources": rag_result.get("sources", []),
-            # "evaluation": evaluation_result,
-            "model_used": rag_result.get("model_used", model_type)
+            "evaluation": evaluation_result,
+            "model_used": rag_result.get("model_used", "Unknown Model")
         }, 200
 
     except Exception as e:

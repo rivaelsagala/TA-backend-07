@@ -14,6 +14,10 @@ from app.handler.model_handler import (
     handle_get_model_info
 )
 
+from app.handler.user_hendler import(
+    handle_get_user
+)
+
 bp = Blueprint("routes", __name__)
 
 # Endpoint RAG (Dokumen & Embedding)
@@ -33,3 +37,6 @@ bp.add_url_rule('/api/chat-sessions', 'get_sessions', handle_get_sessions, metho
 bp.add_url_rule('/api/chat-history/<int:session_id>', 'get_history', handle_get_history, methods=['GET'])
 bp.add_url_rule('/api/chat-sessions/<int:session_id>', 'update_session', handle_update_session, methods=['PUT'])
 bp.add_url_rule('/api/chat-sessions/<int:session_id>', 'delete_session', handle_delete_session, methods=['DELETE'])
+
+# Endpoint User
+bp.add_url_rule('/api/user/<int:id>', 'get_user', handle_get_user, methods=['GET'])

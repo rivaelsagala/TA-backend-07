@@ -1,17 +1,20 @@
+import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from loguru import logger
-from src.config import settings
+from dotenv import load_dotenv
 import json
+
+load_dotenv()
 
 def get_db_connection():
     """Membuat koneksi ke database PostgreSQL"""
     return psycopg2.connect(
-        host=settings.db_host,
-        port=settings.db_port,
-        database=settings.db_name,
-        user=settings.db_user,
-        password=settings.db_password
+        host=os.getenv("DB_HOST", ""),
+        port=int(os.getenv("DB_PORT", "")),
+        database=os.getenv("DB_NAME", ""),
+        user=os.getenv("DB_USER", ""),
+        password=os.getenv("DB_PASSWORD", "")
     )
 
 def create_chat_session(user_id: int, session_name: str):

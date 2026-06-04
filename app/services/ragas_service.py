@@ -1,19 +1,27 @@
 """
 Service untuk evaluasi RAG menggunakan framework RAGAS
 """
+import os
 import warnings
 from typing import Dict, Any, List
 from loguru import logger
 from datasets import Dataset
 from ragas import evaluate
-from ragas.metrics import faithfulness, answer_relevancy, context_precision
+from ragas.metrics import (
+    faithfulness,
+    answer_relevancy,
+    context_precision,
+    context_recall,
+    context_entity_recall,
+    NoiseSensitivity
+)
+from dotenv import load_dotenv
 
 # Import library Langchain untuk custom endpoint (Maiarouter)
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
 
-# Import konfigurasi
-from src.config import settings
+load_dotenv()
 
 # Supaya warning tidak mengganggu
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -35,18 +43,34 @@ class RagasEvaluationService:
        - Input: question + contexts + ground_truth
        - Tinggi = konteks yang diambil tepat sasaran, tidak banyak noise
        - Konteks relevan muncul di ranking atas
+       
+    4. Context Recall (0-1): Mengukur seberapa banyak informasi dari ground truth tercakup dalam konteks
+       - Input: contexts + ground_truth (WAJIB diisi dengan jawaban pakar, bukan jawaban LLM)
+       - Tinggi = konteks berhasil mencakup semua informasi penting dari referensi
+       
+    5. Context Entity Recall (0-1): Mengukur seberapa banyak entitas penting dari ground truth ada di konteks
+       - Input: contexts + ground_truth (WAJIB diisi dengan jawaban pakar)
+       - Tinggi = entitas kunci (nama, pasal, dll) dari referensi ditemukan di konteks
+       
+    6. Noise Sensitivity (0-1): Mengukur apakah model terpengaruh oleh konteks yang tidak relevan (noise)
+       - Input: question + answer + contexts + ground_truth
+       - Rendah = model tidak mudah dipengaruhi noise, lebih baik
+       
+    ⚠️ PENTING: Metrik context_recall, context_entity_recall, dan noise_sensitivity memerlukan
+    ground_truth berupa jawaban pakar yang valid. Jika reference tidak dikirim, nilai metrik
+    tersebut tidak akan akurat.
     """
     
     def __init__(self):
-        # Konfigurasi Maiarouter API dari settings
-        self.api_key = settings.openai_api_key
-        self.base_url = settings.openai_base_url
+        # Konfigurasi Maiarouter API dari env
+        self.api_key = os.getenv("OPENAI_API_KEY", "")
+        self.base_url = os.getenv("OPENAI_BASE_URL", "")
         
         # Inisialisasi LLM untuk RAGAS
         self.custom_llm = ChatOpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
-            model=settings.ragas_model,
+            model="openai/gpt-3.5-turbo-16k",
             temperature=0.1
         )
         
@@ -54,14 +78,20 @@ class RagasEvaluationService:
         self.custom_embeddings = OpenAIEmbeddings(
             api_key=self.api_key,
             base_url=self.base_url,
-            model=settings.embedding_model
+            model="openai/text-embedding-3-large"
         )
+        
+        # Inisialisasi NoiseSensitivity
+        self.noise_sensitivity = NoiseSensitivity()
         
         # Metrik yang akan digunakan
         self.metrics = [
-            faithfulness,       # Apakah jawaban didukung oleh konteks
-            answer_relevancy,   # Apakah jawaban relevan dengan pertanyaan
-            context_precision   # Apakah konteks yang diambil relevan dan presisi
+            faithfulness,           # Apakah jawaban didukung oleh konteks?
+            answer_relevancy,       # Apakah jawaban relevan dengan pertanyaan?
+            context_precision,      # Apakah konteks relevan dan presisi? (butuh ground_truth)
+            context_recall,         # Apakah konteks mencakup info di ground truth? (butuh ground_truth)
+            context_entity_recall,  # Apakah entitas penting dari ground truth ada di konteks? (butuh ground_truth)
+            self.noise_sensitivity  # Seberapa sensitif model terhadap noise? (butuh ground_truth)
         ]
         
         logger.info("RAGAS Evaluation Service initialized")
@@ -80,15 +110,22 @@ class RagasEvaluationService:
             question: Pertanyaan user
             answer: Jawaban dari sistem RAG
             contexts: List konteks yang diambil dari vector database
-            reference: Ground truth answer (opsional, untuk context_precision tidak wajib)
+            reference: Ground truth answer (jawaban pakar/referensi yang valid).
+                       WAJIB diisi untuk hasil context_recall, context_entity_recall,
+                       dan noise_sensitivity yang akurat. Jika None, metrik-metrik
+                       tersebut tidak akan valid karena menggunakan jawaban LLM sebagai acuan.
         
         Returns:
-            Dictionary berisi hasil evaluasi (faithfulness, answer_relevancy, context_precision)
+            Dictionary berisi hasil evaluasi semua metrik
         """
         try:
-            # Untuk metrik yang digunakan sekarang, reference tidak diperlukan
-            # Tapi tetap disimpan untuk kompatibilitas
             if reference is None:
+                logger.warning(
+                    "⚠️ 'reference' (ground_truth) tidak diberikan. "
+                    "Metrik context_recall, context_entity_recall, dan noise_sensitivity "
+                    "tidak akan akurat karena menggunakan jawaban LLM sebagai ground truth. "
+                    "Untuk pengujian valid, berikan jawaban pakar sebagai reference."
+                )
                 reference = answer
             
             # Siapkan dataset untuk evaluasi
@@ -120,12 +157,15 @@ class RagasEvaluationService:
                 "faithfulness": float(result_dict.get("faithfulness", 0)),
                 "answer_relevancy": float(result_dict.get("answer_relevancy", 0)),
                 "context_precision": float(result_dict.get("context_precision", 0)),
-                "average_score": float(
-                    (result_dict.get("faithfulness", 0) + 
-                    result_dict.get("answer_relevancy", 0) + 
-                    result_dict.get("context_precision", 0)) / 3
-                )
+                "context_recall": float(result_dict.get("context_recall", 0)),
+                "context_entity_recall": float(result_dict.get("context_entity_recall", 0)),
+                "noise_sensitivity": float(result_dict.get("noise_sensitivity", 0)),
             }
+            
+            # Rata-rata dari seluruh metrik
+            formatted_result["average_score"] = round(
+                sum(formatted_result.values()) / len(formatted_result), 4
+            )
             
             logger.info(f"Evaluation completed: {formatted_result}")
             return formatted_result
@@ -137,6 +177,9 @@ class RagasEvaluationService:
                 "faithfulness": 0,
                 "answer_relevancy": 0,
                 "context_precision": 0,
+                "context_recall": 0,
+                "context_entity_recall": 0,
+                "noise_sensitivity": 0,
                 "average_score": 0
             }
     

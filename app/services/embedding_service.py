@@ -1,16 +1,19 @@
+import os
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
 from supabase import create_client, Client
-from src.config import settings
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Inisialisasi client Supabase
-supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
+supabase: Client = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
 
 # Inisialisasi model embedding
 embeddings = OpenAIEmbeddings(
-    model=settings.embedding_model,
-    openai_api_key=settings.openai_api_key,
-    openai_api_base=settings.openai_base_url
+    model=os.getenv("EMBEDDING_MODEL", "openai/text-embedding-3-large"),
+    openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+    openai_api_base=os.getenv("OPENAI_BASE_URL", "https://api.maiarouter.ai/v1")
 )
 
 def store_chunks_to_supabase(chunks):
@@ -19,7 +22,7 @@ def store_chunks_to_supabase(chunks):
         chunks,
         embeddings,
         client=supabase,
-        table_name=settings.supabase_table_name,
+        table_name=os.getenv("SUPABASE_TABLE_NAME", "documents"),
         query_name="match_documents" 
     )
     return vector_store
