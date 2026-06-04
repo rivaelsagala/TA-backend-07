@@ -1,7 +1,7 @@
+import os
 import fitz  # PyMuPDF
 import pytesseract
 import io
-import os
 import re
 import json
 import cv2         
@@ -10,8 +10,10 @@ import psycopg2
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from PIL import Image
-from src.config import settings
+from dotenv import load_dotenv
 from loguru import logger
+
+load_dotenv()
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
@@ -149,8 +151,8 @@ def extract_text_from_pdf(file_path: str):
 
 def chunk_documents(documents: list):
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=settings.chunk_size,      
-        chunk_overlap=settings.chunk_overlap,
+        chunk_size=1000,      
+        chunk_overlap=200,
         separators=["\n\n", "\n", ".", " ", ""]
     )
     
@@ -219,13 +221,13 @@ def save_chunks_to_postgres(chunks: list) -> bool:
         # 1. Buka Koneksi ke Database menggunakan Settings Pydantic
         logger.info("🔗 Menghubungkan ke PostgreSQL database...")
         conn = psycopg2.connect(
-            host=settings.db_host,
-            port=settings.db_port,
-            database=settings.db_name,
-            user=settings.db_user,
-            password=settings.db_password
+            host=os.getenv("DB_HOST", ""),
+            port=int(os.getenv("DB_PORT", "")),
+            database=os.getenv("DB_NAME", ""),
+            user=os.getenv("DB_USER", ""),
+            password=os.getenv("DB_PASSWORD", "")
         )
-        logger.debug(f"✅ Koneksi berhasil ke {settings.db_host}:{settings.db_port}/{settings.db_name}")
+        logger.debug(f"✅ Koneksi berhasil ke {os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}")
         
         cursor = conn.cursor()
         
@@ -276,7 +278,7 @@ def save_chunks_to_postgres(chunks: list) -> bool:
         
     except psycopg2.OperationalError as e:
         logger.error(f"❌ Gagal terhubung ke database PostgreSQL: {e}")
-        logger.error(f"   Pastikan kredensial database benar: host={settings.db_host}, port={settings.db_port}, db={settings.db_name}, user={settings.db_user}")
+        logger.error(f"   Pastikan kredensial database benar: host={os.getenv('DB_HOST')}, port={os.getenv('DB_PORT')}, db={os.getenv('DB_NAME')}, user={os.getenv('DB_USER')}")
         return False
         
     except psycopg2.ProgrammingError as e:

@@ -13,14 +13,25 @@ def handle_chat():
     if not data or 'message' not in data or 'session_id' not in data or 'user_id' not in data:
         return jsonify({"error": "Format request salah. Butuh message, session_id, dan user_id"}), 400
     
-    # Parameter untuk memilih model: use_finetuned_model (default: False)
-    use_finetuned_model = data.get('use_finetuned_model', False)
+    # Ambil model_id dari request. Jika kosong, default gunakan 1 (Llama-3.1-8B)
+    # 1: meta-llama/Llama-3.1-8B-Instruct
+    # 2: Qwen/Qwen2.5-7B-Instruct
+    # 3: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+    # 4: model_merged_legal (fine-tuned)
+    model_id = data.get('model_id', 1)
+    
+    # Ambil reference (ground truth) dari request body (opsional).
+    # Jika diisi, hasil evaluasi RAGAS akan lebih akurat (terutama context_recall,
+    # context_entity_recall, noise_sensitivity). Jika tidak diisi, evaluasi tetap
+    # berjalan tapi metrik berbasis ground_truth tidak valid.
+    reference = data.get('reference', None)
     
     response_data, status_code = chat_with_history(
         session_id=data['session_id'],
         user_id=data['user_id'],
         user_question=data['message'],
-        use_finetuned_model=use_finetuned_model
+        model_id=model_id,
+        reference=reference
     )
     return jsonify(response_data), status_code
 

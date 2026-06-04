@@ -1,42 +1,60 @@
+import os
 import requests
 from typing import Optional, Dict, Any, List
 from loguru import logger
 from supabase import create_client, Client
+from dotenv import load_dotenv
 
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
-from src.config import settings
+
+# Load environment variables dari file .env
+load_dotenv()
 
 # ==========================================
 # 1. INISIALISASI DATABASE & EMBEDDINGS
 # ==========================================
-# Catatan: Kita tetap menggunakan OpenAI untuk Embeddings sesuai setup aslimu
-supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
+supabase_url = os.getenv("SUPABASE_URL", "")
+supabase_key = os.getenv("SUPABASE_KEY", "")
+
+supabase: Client = create_client(supabase_url, supabase_key)
+
 embeddings = OpenAIEmbeddings(
-    model=settings.embedding_model,
-    openai_api_key=settings.openai_api_key,
-    openai_api_base=settings.openai_base_url
+    model= "openai/text-embedding-3-large",
+    openai_api_key=os.getenv("OPENAI_API_KEY", ""),
+    openai_api_base=os.getenv("OPENAI_BASE_URL", "")
 )
 
 # ==========================================
-# 2. HUGGINGFACE SERVICE (LLM Llama 3.1 8B)
+# 2. DAFTAR MODEL YANG TERSEDIA
+# ==========================================
+AVAILABLE_MODELS = {
+    1: {"name": "meta-llama/Llama-3.1-8B-Instruct", "type": "original"},
+    2: {"name": "Qwen/Qwen2.5-7B-Instruct", "type": "original"},
+    3: {"name": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B", "type": "original"},
+    4: {"name": "model_merged_legal", "type": "fine-tuned"},
+    5: {"name": "openai/gpt-4o-mini", "type": "openai"},
+    6: {"name": "openai/gpt-3.5-turbo", "type": "openai"}
+}
+
+# ==========================================
+# 3. HUGGINGFACE SERVICE (LLM Multi-Model Support)
 # ==========================================
 class HuggingFaceService:
     """Service untuk berinteraksi dengan HuggingFace Router API dan Fine-tuned Model"""
     
     def __init__(self):
         # HuggingFace Router API (Model belum fine-tuned)
-        self.api_url = settings.hf_api_url
-        self.token = settings.hf_token
-        self.model = settings.hf_llm_model
+        # Menggunakan HF_BASE_URL sesuai dengan .env Anda
+        self.api_url = os.getenv("HF_BASE_URL", "")
+        self.token = os.getenv("HF_TOKEN", "")
         
         # Fine-tuned Model API (B200 Server)
-        self.finetuned_api_url = settings.finetuned_api_url
-        self.finetuned_model_name = settings.finetuned_model_name
+        self.finetuned_api_url = os.getenv("FINETUNED_API_URL", "")
         
         # Common settings
-        self.temperature = settings.llm_temperature
-        self.max_tokens = settings.llm_max_tokens
+        self.temperature = 0.1
+        self.max_tokens = 1024
         
         self.headers = {
             "Authorization": f"Bearer {self.token}",
@@ -64,20 +82,31 @@ class HuggingFaceService:
             logger.error(f"❌ Error loading fine-tuned model: {str(e)}")
             return False
     
-    def query(self, messages: List[Dict[str, str]], use_finetuned: bool = False, **kwargs) -> Optional[Dict[str, Any]]:
+    def query(self, messages: List[Dict[str, str]], model_id: int = 1, **kwargs) -> Optional[Dict[str, Any]]:
         """
-        Kirim query ke HuggingFace Router API atau Fine-tuned Model API
+        Kirim query ke HuggingFace Router API, Fine-tuned Model API, atau Maia Router
         
         Args:
-            messages: List of message dictionaries
-            use_finetuned: True untuk menggunakan model fine-tuned, False untuk model original
-            **kwargs: Additional parameters
+            messages: List of message dictionaries with role and content
+            model_id: ID model yang akan digunakan (1-5)
+                1: meta-llama/Llama-3.1-8B-Instruct (HuggingFace)
+                2: Qwen/Qwen2.5-7B-Instruct (HuggingFace)
+                3: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B (HuggingFace)
+                4: model_merged_legal (Fine-tuned)
+                5: openai/gpt-4.1-mini (Maia Router)
+            **kwargs: Additional parameters like temperature, max_tokens
         """
         try:
-            if use_finetuned:
-                # Gunakan Fine-tuned Model API (B200 Server)
+            # Dapatkan info model, default ke model id 1 (Llama 3.1) jika id tidak ditemukan
+            model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS[1])
+            model_type = model_info.get("type", "original")
+            
+            if model_type == "fine-tuned":
+                # ============================================
+                # FINE-TUNED MODEL API (B200 Server)
+                # ============================================
                 api_url = f"{self.finetuned_api_url}/chat"
-                logger.debug(f"FINE-TUNED model: {self.finetuned_model_name}")
+                logger.debug(f"FINE-TUNED model: {model_info['name']}")
                 
                 # Extract user message dari messages array
                 user_message = ""
@@ -104,9 +133,7 @@ class HuggingFaceService:
                 response.raise_for_status()
                 result = response.json()
                 
-                # Format response dari B200 ke format standar
-                # B200 response: {"answer": "...", "message": "..."}
-                # Convert ke format: {"choices": [{"message": {"content": "..."}}]}
+                # Standardisasi format response agar konsisten
                 standardized_result = {
                     "choices": [
                         {
@@ -119,14 +146,53 @@ class HuggingFaceService:
                 
                 logger.info(f"Fine-tuned Model API response successful")
                 return standardized_result
+
+            elif model_type == "openai":
+                # ============================================
+                # MAIA ROUTER (OpenAI Compatible API)
+                # ============================================
+                # Ambil base_url dari env, hapus '/' di akhir jika ada, dan tambahkan /chat/completions
+                base_url = os.getenv("OPENAI_BASE_URL", "https://api.maiarouter.ai/v1").rstrip('/')
+                api_url = f"{base_url}/chat/completions"
+                api_key = os.getenv("OPENAI_API_KEY", "")
                 
-            else:
-                # Gunakan HuggingFace Router API (model original)
-                api_url = self.api_url
-                logger.debug(f"Using ORIGINAL model: {self.model}")
+                logger.debug(f"Using MAIA ROUTER model: {model_info['name']}")
                 
                 payload = {
-                    "model": self.model,
+                    "model": model_info["name"],
+                    "messages": messages,
+                    "temperature": kwargs.get("temperature", self.temperature),
+                    "max_tokens": kwargs.get("max_tokens", self.max_tokens),
+                }
+                
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+                
+                logger.debug(f"Sending request to Maia Router: {api_url}")
+                response = requests.post(
+                    api_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=300
+                )
+                response.raise_for_status()
+                result = response.json()
+                
+                logger.info("Maia Router API response successful")
+                return result
+                
+            else:
+                # ============================================
+                # HUGGINGFACE ROUTER API (Original Models)
+                # ============================================
+                api_url = self.api_url
+                model_name = model_info["name"]
+                logger.debug(f"Using ORIGINAL model: {model_name}")
+                
+                payload = {
+                    "model": model_name,
                     "messages": messages,
                     "temperature": kwargs.get("temperature", self.temperature),
                     "max_tokens": kwargs.get("max_tokens", self.max_tokens),
@@ -160,9 +226,9 @@ class HuggingFaceService:
             logger.error(f"❌ Unexpected error in query(): {str(e)}")
             return None
     
-    def get_completion(self, messages: List[Dict[str, str]], use_finetuned: bool = False, **kwargs) -> Optional[str]:
+    def get_completion(self, messages: List[Dict[str, str]], model_id: int = 1, **kwargs) -> Optional[str]:
         """Dapatkan completion text dari messages"""
-        response = self.query(messages, use_finetuned=use_finetuned, **kwargs)
+        response = self.query(messages, model_id=model_id, **kwargs)
         
         if response and "choices" in response and len(response["choices"]) > 0:
             choice = response["choices"][0]
@@ -177,7 +243,7 @@ class HuggingFaceService:
         user_question: str,
         context: str,
         system_prompt: Optional[str] = None,
-        use_finetuned: bool = False,
+        model_id: int = 1,
         **kwargs
     ) -> Optional[str]:
         """
@@ -185,9 +251,9 @@ class HuggingFaceService:
         
         Args:
             user_question: Pertanyaan user
-            context: Konteks dokumen
+            context: Context dari dokumen
             system_prompt: Custom system prompt (optional)
-            use_finetuned: True untuk model fine-tuned, False untuk model original
+            model_id: ID model yang akan digunakan (1-4)
         """
         if not system_prompt:
             system_prompt = (f"""
@@ -240,41 +306,43 @@ class HuggingFaceService:
                     """
             )
             
-        
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_question}
         ]
         
-        model_type = "Fine-tuned" if use_finetuned else "Original"
-        logger.info(f"Calling {model_type} Model API with question: {user_question[:50]}...")
-        return self.get_completion(messages, use_finetuned=use_finetuned, **kwargs)
+        model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS[1])
+        logger.info(f"Calling Model API ({model_info['name']}) with question: {user_question[:50]}...")
+        return self.get_completion(messages, model_id=model_id, **kwargs)
 
 # Singleton instance
 hf_service = HuggingFaceService()
 
-
-def get_answer_from_rag(query: str, use_finetuned_model: bool = False) -> dict:
+def get_answer_from_rag(query: str, model_id: int = 1) -> dict:
     """
     Mengeksekusi full pipeline RAG: Retrieve context dari Supabase
-    lalu generate jawaban menggunakan HuggingFace Llama 3.1 atau Fine-tuned Model.
+    lalu generate jawaban menggunakan model yang dipilih.
     
     Args:
         query: Pertanyaan user
-        use_finetuned_model: True untuk menggunakan model fine-tuned, False untuk model original
+        model_id: ID model yang akan digunakan (1-4)
+            1: meta-llama/Llama-3.1-8B-Instruct
+            2: Qwen/Qwen2.5-7B-Instruct
+            3: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+            4: model_merged_legal (fine-tuned)
     """
+    # Mengambil pengaturan dari environment variable
+    supabase_table = os.getenv("SUPABASE_TABLE_NAME", "")
     # 1. Setup Vector Store sebagai Retriever
     vector_store = SupabaseVectorStore(
         client=supabase,
         embedding=embeddings,
-        table_name=settings.supabase_table_name,
+        table_name=supabase_table,
         query_name="match_documents"
-        # query_name="match_new_documents"
     )
     
     # 2. Ambil dokumen relevan
-    docs = vector_store.similarity_search(query, k=settings.top_k_results)
-    # docs = []
+    docs = vector_store.similarity_search(query, k=5)
     
     # 3. Ekstrak konteks dan format sumber dokumen
     context_texts = []
@@ -286,15 +354,14 @@ def get_answer_from_rag(query: str, use_finetuned_model: bool = False) -> dict:
     # Gabungkan semua teks konteks dengan pemisah yang jelas
     context_joined = "\n\n---\n\n".join(context_texts)
 
-    # 4. Dapatkan jawaban dari LLM (Original atau Fine-tuned)
-    # System prompt sudah di-handle oleh chat_with_context() dengan default yang sesuai
-    model_type = "Fine-tuned" if use_finetuned_model else "Original"
-    logger.info(f"Using {model_type} Model for RAG")
+    # 4. Dapatkan jawaban dari LLM berdasarkan model_id
+    model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS[1])
+    logger.info(f"Using Model {model_info['name']} for RAG")
     
     answer = hf_service.chat_with_context(
         user_question=query,
         context=context_joined,
-        use_finetuned=use_finetuned_model
+        model_id=model_id
     )
     
     # Fallback jika API gagal atau mengembalikan None
@@ -303,5 +370,5 @@ def get_answer_from_rag(query: str, use_finetuned_model: bool = False) -> dict:
     return {
         "answer": final_answer,
         "sources": sources,
-        "model_used": model_type
+        "model_used": model_info["name"]
     }

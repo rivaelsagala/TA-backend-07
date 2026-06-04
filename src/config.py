@@ -26,15 +26,24 @@ class Settings(BaseSettings):
     hf_token: str = Field(default="", alias="HF_TOKEN")
     hf_api_url: str = Field(
         default="https://router.huggingface.co/v1/chat/completions",
-        # default="https://router.huggingface.co/v1",
         alias="HF_API_URL"
     )
-    hf_llm_model: str = Field(
-        # default="meta-llama/Llama-3.1-8B-Instruct",
-        default="Qwen/Qwen2.5-7B-Instruct",
+
+    llama_model: str = Field(
+        default="meta-llama/Llama-3.1-8B-Instruct",
         alias="HF_LLM_MODEL"
     )
-    
+
+    qwen_model: str = Field(
+        default="Qwen/Qwen2.5-7B-Instruct",  
+        alias="HF_LLM_MODEL"
+    )
+
+    deepseek_model: str = Field(
+        default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+        alias="HF_LLM_MODEL"
+    )
+
     # ---- Fine-tuned Model (Local API on B200 Server) ----
     finetuned_api_url: str = Field(
         default="http://localhost:6000/api",
@@ -46,7 +55,6 @@ class Settings(BaseSettings):
     )
 
     # ---- LLM Model ----
-    llm_model: str = Field(default="Qwen/Qwen2.5-7B-Instruct", alias="LLM_MODEL")
     llm_temperature: float = Field(default=0.1, alias="LLM_TEMPERATURE")
     llm_max_tokens: int = Field(default=1024, alias="LLM_MAX_TOKENS")
 

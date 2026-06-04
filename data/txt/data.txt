@@ -1,0 +1,14 @@
+1. Berperanlah sebagai asisten hukum pemerintaha desa.apakah tujuan dari penyelenggaraan pelayanan KIBBLA? Sertakan pasal jika tersedia. Berikan jawaban menggunakan bahasa sederhana, ringkas, jelas, dan mudah dipahami masyarakat. Jawab hanya berdasarkan isi dokumen. Jika informasi tidak ditemukan dalam dokumen, jawab: “Informasi tidak ditemukan dalam dokumen". 
+2. Berperanlah sebagai asisten hukum pemerintaha desa.Apakah tugas bidan dalam pelayanan KIBBLA? Sertakan pasal jika tersedia. Berikan jawaban menggunakan bahasa sederhana, ringkas, jelas, dan mudah dipahami masyarakat. Jawab hanya berdasarkan isi dokumen. Jika informasi tidak ditemukan dalam dokumen, jawab: “Informasi tidak ditemukan dalam dokumen".
+3. Berperanlah sebagai asisten hukum pemerintah desa. Bagaimana mekanisme bantuan biaya bagi masyarakat miskin yang mengalami kegawatdaruratan? Sertakan pasal jika tersedia. Berikan jawaban menggunakan bahasa sederhana, ringkas, jelas, dan mudah dipahami masyarakat. Jawab hanya berdasarkan isi dokumen. Jika informasi tidak ditemukan dalam dokumen, jawab: “Informasi tidak ditemukan dalam dokumen".
+4. Berperanlah sebagai asisten hukum pemerintahan desa. Siapa yang bertanggung jawab melakukan pengawasan terhadap pengelolaan kegiatan dan keuangan KIBBLA? Sertakan pasal jika tersedia. Berikan jawaban menggunakan bahasa sederhana, ringkas, jelas, dan mudah dipahami masyarakat. Jawab hanya berdasarkan isi dokumen. Jika informasi tidak ditemukan dalam dokumen, jawab: “Informasi tidak ditemukan dalam dokumen.”
+5. Berperanlah sebagai asisten hukum pemerintahan desa. Bagaimana persiapan transportasi bagi masyarakat yang mengalami kasus kegawatdaruratan? Sertakan pasal jika tersedia. Berikan jawaban menggunakan bahasa sederhana, ringkas, jelas, dan mudah dipahami masyarakat. Jawab hanya berdasarkan isi dokumen. Jika informasi tidak ditemukan dalam dokumen, jawab: “Informasi tidak ditemukan dalam dokumen.”
+
+
+meta-llama/Llama-3.1-8B-Instruct
+mistralai/Mistral-Nemo-Instruct-2407
+deepseek-ai/deepseek-coder-6.7b-instruct
+google/gemma-3-12b-it
+
+
+
