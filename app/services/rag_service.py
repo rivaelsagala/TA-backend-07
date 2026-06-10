@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
+from app.services.reranker_service import rerank_documents
 
 # Load environment variables dari file .env
 load_dotenv()
@@ -20,9 +21,9 @@ supabase_key = os.getenv("SUPABASE_KEY", "")
 supabase: Client = create_client(supabase_url, supabase_key)
 
 embeddings = OpenAIEmbeddings(
-    model= "openai/text-embedding-3-large",
-    openai_api_key=os.getenv("OPENAI_API_KEY", ""),
-    openai_api_base=os.getenv("OPENAI_BASE_URL", "")
+    model="openai/text-embedding-3-large",
+    api_key=os.getenv("OPENAI_API_KEY", ""),
+    base_url=os.getenv("OPENAI_BASE_URL", "")
 )
 
 # ==========================================
@@ -34,7 +35,10 @@ AVAILABLE_MODELS = {
     3: {"name": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B", "type": "original"},
     4: {"name": "model_merged_legal", "type": "fine-tuned"},
     5: {"name": "openai/gpt-4o-mini", "type": "openai"},
-    6: {"name": "openai/gpt-3.5-turbo", "type": "openai"}
+    6: {"name": "openai/gpt-3.5-turbo", "type": "openai"},
+    7: {"name": "maia/gemini-2.0-flash", "type": "google"},
+    8: {"name": "rivaelsagala/TA-llama-3-1-8-b-finetune", "type": "rivael"}
+
 }
 
 # ==========================================
@@ -53,8 +57,8 @@ class HuggingFaceService:
         self.finetuned_api_url = os.getenv("FINETUNED_API_URL", "")
         
         # Common settings
-        self.temperature = 0.1
-        self.max_tokens = 1024
+        self.temperature = 0.0
+        self.max_tokens = 2000
         
         self.headers = {
             "Authorization": f"Bearer {self.token}",
@@ -108,20 +112,30 @@ class HuggingFaceService:
                 api_url = f"{self.finetuned_api_url}/chat"
                 logger.debug(f"FINE-TUNED model: {model_info['name']}")
                 
-                # Extract user message dari messages array
+                # Extract system_prompt DAN user message dari messages array
+                # PENTING: system_prompt berisi konteks dokumen RAG yang wajib dikirim
+                # agar fine-tuned model menjawab berdasarkan konteks, bukan memori internal
+                system_content = ""
                 user_message = ""
                 for msg in messages:
-                    if msg.get("role") == "user":
+                    if msg.get("role") == "system":
+                        system_content = msg.get("content", "")
+                    elif msg.get("role") == "user":
                         user_message = msg.get("content", "")
-                        break
                 
-                # Format payload untuk B200 API: hanya butuh "message"
+                if not system_content:
+                    logger.warning("system_prompt kosong untuk fine-tuned model! Konteks RAG tidak akan digunakan.")
+                
+                # Format payload untuk B200 API:
+                # - system_prompt: berisi konteks dokumen RAG (WAJIB agar evaluasi RAGAS valid)
+                # - message: pertanyaan user
                 payload = {
+                    "system_prompt": system_content,
                     "message": user_message
                 }
                 
                 logger.debug(f"Sending request to B200: {api_url}")
-                logger.debug(f"Payload: {payload}")
+                logger.debug(f"Fine-tuned payload — system_prompt length: {len(system_content)} chars, message: {user_message[:80]}...")
                 
                 response = requests.post(
                     api_url,
@@ -257,49 +271,17 @@ class HuggingFaceService:
         """
         if not system_prompt:
             system_prompt = (f"""
-                    Anda adalah AI Assistant untuk sistem Retrieval-Augmented Generation (RAG) yang bertugas menjawab pertanyaan berdasarkan dokumen yang diberikan.
+                    Anda adalah asisten hukum pemerintahan desa.
 
-                    ATURAN UTAMA:
-                    1. Gunakan HANYA informasi yang tersedia pada konteks/dokumen.
-                    2. Jangan menambahkan informasi dari pengetahuan pribadi atau asumsi di luar dokumen.
-                    3. Jika jawaban tidak ditemukan pada konteks, jawab:
-                    "Informasi tidak ditemukan dalam dokumen."
-                    4. Jawaban harus jelas, ringkas, relevan, dan mudah dipahami.
-                    5. Prioritaskan informasi yang paling sesuai dengan pertanyaan pengguna.
-                    6. Jika tersedia, sertakan pasal, poin, atau bagian dokumen yang mendukung jawaban.
-                    7. Jangan membuat interpretasi hukum di luar isi dokumen.
-                    8. Jangan menghasilkan jawaban yang ambigu, spekulatif, atau berhalusinasi.
-                    9. Gunakan Bahasa Indonesia formal dan profesional.
-                    10. Jika pertanyaan meminta daftar atau poin-poin, gunakan format bullet point.
+                    Jawab pertanyaan pengguna hanya berdasarkan konteks dokumen yang diberikan.
 
-                    FORMAT KERJA:
-                    - Analisis pertanyaan pengguna.
-                    - Identifikasi informasi paling relevan dari konteks.
-                    - Susun jawaban berdasarkan isi dokumen.
-                    - Pastikan jawaban konsisten dengan konteks.
-
-                    CONTOH:
-                    Konteks:
-                    Pasal 3 menjelaskan bahwa tujuan penyelenggaraan pelayanan KIBBLA adalah meningkatkan kualitas pelayanan kesehatan ibu dan anak.
-
-                    Pertanyaan:
-                    Apa tujuan penyelenggaraan pelayanan KIBBLA?
-
-                    Jawaban:
-                    Tujuan penyelenggaraan pelayanan KIBBLA adalah meningkatkan kualitas pelayanan kesehatan ibu dan anak sebagaimana dijelaskan dalam Pasal 3.
-
-                    CONTOH JIKA JAWABAN TIDAK ADA:
-                    Pertanyaan:
-                    Siapa pendiri program KIBBLA?
-
-                    Jawaban:
-                    Informasi tidak ditemukan dalam dokumen.
-
-                    INSTRUKSI TAMBAHAN:
-                    - Fokus pada akurasi jawaban.
-                    - Hindari pengulangan kalimat yang tidak perlu.
-                    - Jangan memberikan opini pribadi.
-                    - Jangan menjawab di luar konteks dokumen yang diberikan.
+                    Aturan:
+                    1. Gunakan hanya informasi dalam konteks dokumen.
+                    2. Jangan menggunakan informasi di luar konteks dokumen.
+                    3. Jangan menambahkan asumsi, opini pribadi, atau informasi yang tidak ada dalam dokumen.
+                    4. Sertakan pasal, ayat, atau bagian atau metadata yang ada dalam dokumen jika tersedia dalam konteks.
+                    5. Gunakan bahasa yang mudah di pahami oleh manusia
+                    6. Jika informasi tidak ditemukan dalam dokumen, jawab: “Informasi tidak ditemukan dalam dokumen.”
 
                     KONTEKS DOKUMEN:
                     {context}
@@ -341,13 +323,26 @@ def get_answer_from_rag(query: str, model_id: int = 1) -> dict:
         query_name="match_documents"
     )
     
-    # 2. Ambil dokumen relevan
-    docs = vector_store.similarity_search(query, k=5)
+    # ==========================================
+    # TAHAP 1: INITIAL RETRIEVAL (K=20)
+    # ==========================================
+    # Ambil lebih banyak dokumen (misal 20) untuk menjaring semua kemungkinan
+    initial_k = 20
+    logger.info(f"Tahap 1: Mengambil top-{initial_k} dokumen awal dari Supabase...")
+    initial_docs = vector_store.similarity_search(query, k=initial_k)
     
-    # 3. Ekstrak konteks dan format sumber dokumen
+    # ==========================================
+    # TAHAP 2: RE-RANKING (K=5)
+    # ==========================================
+    final_k = 5
+    logger.info("Tahap 2: Menerapkan metode Re-ranking menggunakan MS Marco Cross-Encoder...")
+    # Masukkan 20 dokumen tadi ke fungsi rerank_documents
+    reranked_docs = rerank_documents(query=query, documents=initial_docs, top_k=final_k)
+    
+    # 3. Ekstrak konteks dan format sumber dokumen dari hasil re-ranking
     context_texts = []
     sources = []
-    for doc in docs:
+    for doc in reranked_docs:
         context_texts.append(doc.page_content)
         sources.append({"content": doc.page_content, "metadata": doc.metadata})
         
@@ -356,7 +351,7 @@ def get_answer_from_rag(query: str, model_id: int = 1) -> dict:
 
     # 4. Dapatkan jawaban dari LLM berdasarkan model_id
     model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS[1])
-    logger.info(f"Using Model {model_info['name']} for RAG")
+    logger.info(f"Using Model {model_info['name']} for Generation")
     
     answer = hf_service.chat_with_context(
         user_question=query,

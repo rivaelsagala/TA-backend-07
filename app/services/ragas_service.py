@@ -21,6 +21,10 @@ from dotenv import load_dotenv
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
 
+# Import wrapper Ragas untuk standarisasi format
+from ragas.llms import LangchainLLMWrapper
+from ragas.embeddings import LangchainEmbeddingsWrapper
+
 load_dotenv()
 
 # Supaya warning tidak mengganggu
@@ -66,20 +70,26 @@ class RagasEvaluationService:
         self.api_key = os.getenv("OPENAI_API_KEY", "")
         self.base_url = os.getenv("OPENAI_BASE_URL", "")
         
-        # Inisialisasi LLM untuk RAGAS
-        self.custom_llm = ChatOpenAI(
+        # 1. Inisialisasi LLM Langchain
+        # Turunkan temperature ke 0.0 agar juri absolut dan tidak berubah-ubah
+        langchain_llm = ChatOpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
             model="openai/gpt-3.5-turbo-16k",
-            temperature=0.1
+            temperature=0.0,
+            max_tokens = 2000
         )
         
-        # Inisialisasi Embeddings untuk RAGAS
-        self.custom_embeddings = OpenAIEmbeddings(
+        # 2. Inisialisasi Embeddings Langchain
+        langchain_embeddings = OpenAIEmbeddings(
             api_key=self.api_key,
             base_url=self.base_url,
             model="openai/text-embedding-3-large"
         )
+        
+        # 3. WAJIB: Bungkus LLM dan Embeddings dengan Wrapper bawaan RAGAS agar format JSON tidak rusak
+        self.custom_llm = LangchainLLMWrapper(langchain_llm)
+        self.custom_embeddings = LangchainEmbeddingsWrapper(langchain_embeddings)
         
         # Inisialisasi NoiseSensitivity
         self.noise_sensitivity = NoiseSensitivity()
@@ -94,14 +104,14 @@ class RagasEvaluationService:
             self.noise_sensitivity  # Seberapa sensitif model terhadap noise? (butuh ground_truth)
         ]
         
-        logger.info("RAGAS Evaluation Service initialized")
+        logger.info("RAGAS Evaluation Service initialized with wrappers")
     
     def evaluate_single_response(
         self,
         question: str,
         answer: str,
         contexts: List[str],
-        reference: str = None
+        ground_truth: str = None
     ) -> Dict[str, Any]:
         """
         Evaluasi satu respons RAG
@@ -110,30 +120,30 @@ class RagasEvaluationService:
             question: Pertanyaan user
             answer: Jawaban dari sistem RAG
             contexts: List konteks yang diambil dari vector database
-            reference: Ground truth answer (jawaban pakar/referensi yang valid).
-                       WAJIB diisi untuk hasil context_recall, context_entity_recall,
-                       dan noise_sensitivity yang akurat. Jika None, metrik-metrik
-                       tersebut tidak akan valid karena menggunakan jawaban LLM sebagai acuan.
+            ground_truth: Ground truth answer (jawaban pakar/referensi yang valid).
+                          WAJIB diisi untuk hasil context_recall, context_entity_recall,
+                          dan noise_sensitivity yang akurat. Jika None, metrik-metrik
+                          tersebut tidak akan valid karena menggunakan jawaban LLM sebagai acuan.
         
         Returns:
             Dictionary berisi hasil evaluasi semua metrik
         """
         try:
-            if reference is None:
+            if ground_truth is None:
                 logger.warning(
-                    "⚠️ 'reference' (ground_truth) tidak diberikan. "
+                    "'ground_truth' tidak diberikan. "
                     "Metrik context_recall, context_entity_recall, dan noise_sensitivity "
                     "tidak akan akurat karena menggunakan jawaban LLM sebagai ground truth. "
-                    "Untuk pengujian valid, berikan jawaban pakar sebagai reference."
+                    "Untuk pengujian valid, berikan jawaban pakar sebagai ground_truth."
                 )
-                reference = answer
+                ground_truth = answer
             
             # Siapkan dataset untuk evaluasi
             data_sample = {
                 "question": [question],
                 "contexts": [contexts],
                 "answer": [answer],
-                "ground_truth": [reference]  # RAGAS menggunakan 'ground_truth' bukan 'reference'
+                "ground_truth": [ground_truth]
             }
             
             eval_dataset = Dataset.from_dict(data_sample)
