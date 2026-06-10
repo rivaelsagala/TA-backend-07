@@ -12,8 +12,8 @@ supabase: Client = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPAB
 # Inisialisasi model embedding
 embeddings = OpenAIEmbeddings(
     model=os.getenv("EMBEDDING_MODEL", "openai/text-embedding-3-large"),
-    openai_api_key=os.getenv("OPENAI_API_KEY", ""),
-    openai_api_base=os.getenv("OPENAI_BASE_URL", "https://api.maiarouter.ai/v1")
+    api_key=os.getenv("OPENAI_API_KEY", ""),
+    base_url=os.getenv("OPENAI_BASE_URL", "https://api.maiarouter.ai/v1")
 )
 
 def store_chunks_to_supabase(chunks):

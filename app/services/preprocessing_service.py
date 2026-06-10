@@ -150,10 +150,13 @@ def extract_text_from_pdf(file_path: str):
 
 
 def chunk_documents(documents: list):
+    # chunk_size dinaikkan agar satu Pasal (beserta isinya) tidak terpotong ke chunk berbeda.
+    # chunk_overlap dinaikkan agar entitas di batas antar-chunk tidak hilang.
+    # separator diurutkan: pisah dulu di batas Pasal/BAB, baru newline/kalimat.
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,      
-        chunk_overlap=200,
-        separators=["\n\n", "\n", ".", " ", ""]
+        chunk_size=1500,
+        chunk_overlap=300,
+        separators=["\n\nPasal ", "\n\nBAB ", "\n\n", "\n", ". ", " ", ""]
     )
     
     return text_splitter.split_documents(documents)

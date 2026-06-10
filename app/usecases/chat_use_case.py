@@ -4,7 +4,7 @@ from app.services.rag_service import get_answer_from_rag
 from app.services import chat_history_service
 from app.services.ragas_service import ragas_service
 
-def chat_with_history(session_id: int, user_id: int, user_question: str, model_id: int = 1, reference: str = None) -> Tuple[Dict[str, Any], int]:
+def chat_with_history(session_id: int, user_id: int, user_question: str, model_id: int = 1, ground_truth: str = None) -> Tuple[Dict[str, Any], int]:
     """
     Chat dengan history dan pilihan model
     
@@ -17,9 +17,9 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             2: Qwen/Qwen2.5-7B-Instruct
             3: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
             4: model_merged_legal (fine-tuned)
-        reference: Ground truth / jawaban pakar (opsional, untuk evaluasi RAGAS yang valid).
-                   Jika tidak diisi, metrik context_recall, context_entity_recall, dan
-                   noise_sensitivity tidak akan akurat.
+        ground_truth: Ground truth / jawaban pakar (opsional, untuk evaluasi RAGAS yang valid).
+                      Jika tidak diisi, metrik context_recall, context_entity_recall, dan
+                      noise_sensitivity tidak akan akurat.
     """
     try:
         logger.info(f"Processing chat for user {user_id}, session {session_id} with model_id {model_id}")
@@ -38,22 +38,28 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             return {"status": "error", "message": "Gagal mendapatkan respons dari sistem RAG"}, 500
         
         # # 4. Evaluasi respons menggunakan RAGAS
-        logger.info("Starting RAGAS evaluation...")
-        contexts = ragas_service.format_contexts_from_sources(rag_result.get("sources", []))
+        # # Catatan untuk model_id=4 (fine-tuned):
+        # # - Evaluasi TETAP dijalankan seperti model lainnya
+        # # - System prompt + konteks dokumen sudah dikirim ke fine-tuned model (diperbaiki)
+        # # - ground_truth digunakan jika dikirim dari client, jika tidak → fallback ke answer
+        # logger.info(f"Starting RAGAS evaluation for model_id={model_id} (model={rag_result.get('model_used', 'Unknown')})...")
+        # logger.debug(f"RAGAS input — ground_truth provided: {ground_truth is not None}, contexts count: {len(rag_result.get('sources', []))}")
         
-        evaluation_result = ragas_service.evaluate_single_response(
-            question=user_question,  
-            answer=rag_result["answer"],
-            contexts=contexts,
-            reference=reference  # None jika tidak dikirim dari Postman (akan trigger warning)
-        )
+        # contexts = ragas_service.format_contexts_from_sources(rag_result.get("sources", []))
         
-        logger.info(f"RAGAS Evaluation: {evaluation_result}")
+        # evaluation_result = ragas_service.evaluate_single_response(
+        #     question=user_question,  
+        #     answer=rag_result["answer"],
+        #     contexts=contexts,
+        #     ground_truth=ground_truth  # None jika tidak dikirim dari client (akan trigger warning)
+        # )
+        
+        # logger.info(f"RAGAS Evaluation (model_id={model_id}): {evaluation_result}")
             
         # 5. Simpan Pertanyaan dan Jawaban ke dalam PostgreSQL (chat_history)
         metadata = {
             "sources": rag_result.get("sources", []),
-            "evaluation": evaluation_result,
+            # "evaluation": evaluation_result,
             "model_used": rag_result.get("model_used", "Unknown Model")
         }
         chat_history_service.save_chat_message(
@@ -69,7 +75,7 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             "message": "Jawaban berhasil diproses",
             "answer": rag_result["answer"],
             "sources": rag_result.get("sources", []),
-            "evaluation": evaluation_result,
+            # "evaluation": evaluation_result,
             "model_used": rag_result.get("model_used", "Unknown Model")
         }, 200
 

@@ -20,18 +20,18 @@ def handle_chat():
     # 4: model_merged_legal (fine-tuned)
     model_id = data.get('model_id', 1)
     
-    # Ambil reference (ground truth) dari request body (opsional).
+    # Ambil ground_truth (jawaban pakar) dari request body (opsional).
     # Jika diisi, hasil evaluasi RAGAS akan lebih akurat (terutama context_recall,
     # context_entity_recall, noise_sensitivity). Jika tidak diisi, evaluasi tetap
     # berjalan tapi metrik berbasis ground_truth tidak valid.
-    reference = data.get('reference', None)
+    ground_truth = data.get('ground_truth', None)
     
     response_data, status_code = chat_with_history(
         session_id=data['session_id'],
         user_id=data['user_id'],
         user_question=data['message'],
         model_id=model_id,
-        reference=reference
+        ground_truth=ground_truth
     )
     return jsonify(response_data), status_code
 
