@@ -1,6 +1,6 @@
 from psycopg2.extras import RealDictCursor
 from loguru import logger
-from app.services.chat_history_service import get_db_connection
+from app.services.chat_service import get_db_connection
 
 def get_user_by_id(user_id: int):
     """Mengambil data user berdasarkan ID"""
