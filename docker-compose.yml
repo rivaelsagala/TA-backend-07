@@ -1,0 +1,48 @@
+# ============================================================
+# docker-compose.yml — RAG Peraturan Desa
+# ============================================================
+# Cara menjalankan:
+#   docker compose up --build        (build & jalankan)
+#   docker compose up -d --build     (background / detached)
+#   docker compose down              (hentikan container)
+# ============================================================
+
+services:
+  rag-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-peraturan-desa
+
+    # Baca semua variabel dari file .env
+    env_file:
+      - .env
+
+    # Override khusus untuk container
+    environment:
+      - FLASK_RUN_HOST=0.0.0.0
+      - PORT=5000
+
+    ports:
+      - "5000:5000"
+
+    # Volume untuk cache model HuggingFace (agar tidak download ulang setiap kali)
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+      # Uncomment baris di bawah jika ingin data/processed bisa diakses dari host
+      # - ./data:/app/data
+
+    # Restart otomatis jika container crash
+    restart: unless-stopped
+
+    # Healthcheck: cek apakah Flask merespons
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  hf-cache:
+    driver: local
