@@ -1,21 +1,28 @@
 import os
 import fitz  # PyMuPDF
-import pytesseract
+# import pytesseract          # <-- OCR (uncomment jika butuh OCR)
 import io
 import re
 import json
-import cv2         
-import numpy as np
+# import cv2                   # <-- OpenCV (uncomment jika butuh OCR)
+# import numpy as np            # <-- OpenCV (uncomment jika butuh OCR)
 import psycopg2
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from PIL import Image
+# from PIL import Image          # <-- OCR (uncomment jika butuh OCR)
 from dotenv import load_dotenv
 from loguru import logger
 
 load_dotenv()
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# [OCR] Path tesseract - uncomment jika butuh OCR
+# import platform
+# _tesseract_default = (
+#     r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+#     if platform.system() == 'Windows'
+#     else '/usr/bin/tesseract'
+# )
+# pytesseract.pytesseract.tesseract_cmd = os.getenv('TESSERACT_CMD', _tesseract_default)
 
 def clean_legal_text(text: str) -> str:
     if not text:
@@ -116,18 +123,20 @@ def extract_text_from_pdf(file_path: str):
         text = page.get_text("text", sort=True).strip()
 
         if not text:
-            logger.info(f"Halaman {page_num + 1}: Menjalankan OCR...")
-            
-            pix = page.get_pixmap(matrix=fitz.Matrix(3, 3)) 
-            img_data = pix.tobytes("png")
-            img_pil = Image.open(io.BytesIO(img_data)).convert('L') 
-            
-            img_cv = np.array(img_pil)
-            _, img_bin = cv2.threshold(img_cv, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            final_img = Image.fromarray(img_bin)
-            
-            custom_ocr_config = r'--oem 3 --psm 6'
-            text = pytesseract.image_to_string(final_img, lang='ind', config=custom_ocr_config)
+            # [OCR Fallback] - uncomment block di bawah jika butuh OCR Tesseract
+            # logger.info(f"Halaman {page_num + 1}: Menjalankan OCR...")
+            #
+            # pix = page.get_pixmap(matrix=fitz.Matrix(3, 3)) 
+            # img_data = pix.tobytes("png")
+            # img_pil = Image.open(io.BytesIO(img_data)).convert('L') 
+            #
+            # img_cv = np.array(img_pil)
+            # _, img_bin = cv2.threshold(img_cv, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            # final_img = Image.fromarray(img_bin)
+            #
+            # custom_ocr_config = r'--oem 3 --psm 6'
+            # text = pytesseract.image_to_string(final_img, lang='ind', config=custom_ocr_config)
+            logger.warning(f"Halaman {page_num + 1}: Teks kosong, OCR dinonaktifkan. Lewati halaman ini.")
 
         if text:
             clean_text = clean_legal_text(text)

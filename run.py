@@ -1,4 +1,4 @@
-
+import os
 from app import create_app
 import logging
 
@@ -8,4 +8,6 @@ app = create_app()
 # logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    host = os.getenv("FLASK_RUN_HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", 5000))
+    app.run(debug=True, host=host, port=port)

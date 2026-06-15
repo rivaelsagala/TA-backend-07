@@ -1,0 +1,74 @@
+# ============================================================
+# .dockerignore — file yang TIDAK perlu dimasukkan ke image
+# ============================================================
+
+# Python / venv
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Data berat (PDF mentah, dataset, processed)
+data/raw/
+data/processed/
+data/extracted/
+data/backup/
+data/dataset/
+data/chroma_db/
+data/json/
+
+# Notebooks
+notebooks/
+
+# Git
+.git/
+.gitignore
+
+# VS Code / IDE
+.vscode/
+.idea/
+
+# Docker sendiri
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & temp
+*.log
+logs/
+temp/
+*.tmp
+*.temp
+
+# Model files (terlalu besar untuk image)
+models/
+*.bin
+*.safetensors
+*.gguf
+*.pth
+*.pt
+
+# Docs
+docs/
+documentation/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
