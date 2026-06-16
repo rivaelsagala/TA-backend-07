@@ -258,6 +258,7 @@ class HuggingFaceService:
         context: str,
         system_prompt: Optional[str] = None,
         model_id: int = 1,
+        chat_history: Optional[List[Dict[str, str]]] = None,
         **kwargs
     ) -> Optional[str]:
         """
@@ -268,39 +269,56 @@ class HuggingFaceService:
             context: Context dari dokumen
             system_prompt: Custom system prompt (optional)
             model_id: ID model yang akan digunakan (1-4)
+            chat_history: Riwayat percakapan sebelumnya (list of {role, content}).
+                          Digunakan agar LLM memahami konteks follow-up questions.
+                          Contoh: user tanya "apa itu desa?" lalu follow-up "siapa yang mengatur?"
+                          → LLM paham "yang mengatur" merujuk ke desa dari percakapan sebelumnya.
         """
         if not system_prompt:
             system_prompt = (f"""
                     Anda adalah asisten hukum pemerintahan desa.
-
+        
                     Jawab pertanyaan pengguna hanya berdasarkan konteks dokumen yang diberikan.
-
+        
                     Aturan:
                     1. Gunakan hanya informasi dalam konteks dokumen.
                     2. Jangan menggunakan informasi di luar konteks dokumen.
                     3. Jangan menambahkan asumsi, opini pribadi, atau informasi yang tidak ada dalam dokumen.
-                    4. Sertakan pasal, ayat, atau bagian atau metadata yang ada dalam dokumen jika tersedia dalam konteks.
-                    5. Gunakan bahasa yang mudah di pahami oleh manusia
-                    6. Jika informasi tidak ditemukan dalam dokumen, jawab: “Informasi tidak ditemukan dalam dokumen.”
-
+                    4. Sertakan pasal, ayat, atau bagian yang ada dalam dokumen jika tersedia dalam konteks.
+                    5. PENTING: Selalu sebutkan sumber dokumen secara spesifik — termasuk nama desa, nomor peraturan, dan tahun — saat mengutip. Contoh: "Berdasarkan Peraturan Desa Biru No. 07 Tahun 2015, Pasal 14..."
+                    6. Jika ada beberapa peraturan dari desa berbeda dengan isi serupa, pastikan Anda merujuk ke peraturan yang tepat sesuai konteks dokumen yang diberikan.
+                    7. Gunakan bahasa yang mudah dipahami oleh manusia.
+                    8. Jika informasi tidak ditemukan dalam dokumen, jawab: "Informasi tidak ditemukan dalam dokumen."
+        
                     KONTEKS DOKUMEN:
                     {context}
                     """
             )
-            
+        
+        # Build messages: system → history → user
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_question}
         ]
         
+        # Insert conversation history (agar LLM paham konteks follow-up)
+        if chat_history:
+            for msg in chat_history:
+                messages.append({
+                    "role": msg.get("role", "user"),
+                    "content": msg.get("content", "")
+                })
+        
+        # Current user question (always last)
+        messages.append({"role": "user", "content": user_question})
+        
         model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS[1])
-        logger.info(f"Calling Model API ({model_info['name']}) with question: {user_question[:50]}...")
+        logger.info(f"Calling Model API ({model_info['name']}) with question: {user_question[:50]}... (history: {len(chat_history or [])} messages)")
         return self.get_completion(messages, model_id=model_id, **kwargs)
 
 # Singleton instance
 hf_service = HuggingFaceService()
 
-def get_answer_from_rag(query: str, model_id: int = 1) -> dict:
+def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[str, str]] = None) -> dict:
     """
     Mengeksekusi full pipeline RAG: Retrieve context dari Supabase
     lalu generate jawaban menggunakan model yang dipilih.
@@ -312,6 +330,9 @@ def get_answer_from_rag(query: str, model_id: int = 1) -> dict:
             2: Qwen/Qwen2.5-7B-Instruct
             3: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
             4: model_merged_legal (fine-tuned)
+        chat_history: Riwayat percakapan sebelumnya (list of {role, content}).
+                      Maks 6 messages (3 pairs) terakhir. Digunakan agar LLM
+                      memahami follow-up questions dari konteks percakapan.
     """
     # Mengambil pengaturan dari environment variable
     supabase_table = os.getenv("SUPABASE_TABLE_NAME", "")
@@ -336,15 +357,45 @@ def get_answer_from_rag(query: str, model_id: int = 1) -> dict:
     # ==========================================
     final_k = 5
     logger.info("Tahap 2: Menerapkan metode Re-ranking menggunakan MS Marco Cross-Encoder...")
-    # Masukkan 20 dokumen tadi ke fungsi rerank_documents
-    reranked_docs = rerank_documents(query=query, documents=initial_docs, top_k=final_k)
+    reranked_docs, top_score = rerank_documents(query=query, documents=initial_docs, top_k=final_k)
+    
+    # ==========================================
+    # TAHAP 2.5: CONFIDENCE THRESHOLD CHECK
+    # ==========================================
+    # MS Marco Cross-Encoder outputs logit scores (can be negative).
+    # Typical scores: relevant > 0, irrelevant < -5.
+    # Jika skor tertinggi di bawah threshold, query tidak relevan dengan dokumen apapun.
+    CONFIDENCE_THRESHOLD = -5.0
+    logger.info(f"Top re-ranking score: {top_score:.4f} (threshold: {CONFIDENCE_THRESHOLD})")
+    
+    if top_score < CONFIDENCE_THRESHOLD:
+        logger.info(f"Confidence too low ({top_score:.4f} < {CONFIDENCE_THRESHOLD}). Query tidak relevan dengan dokumen.")
+        return {
+            "answer": "Maaf, informasi yang Anda tanyakan tidak ditemukan dalam dokumen peraturan desa yang tersedia. Silakan coba pertanyaan lain terkait peraturan desa.",
+            "sources": [],
+            "model_used": "ConfidenceFilter",
+            "confidence_score": top_score
+        }
     
     # 3. Ekstrak konteks dan format sumber dokumen dari hasil re-ranking
+    #    DENGAN METADATA UNTUK DISAMBIGUASI ANTAR PERATURAN DESA
     context_texts = []
     sources = []
     for doc in reranked_docs:
-        context_texts.append(doc.page_content)
-        sources.append({"content": doc.page_content, "metadata": doc.metadata})
+        # Bangun context block dengan metadata header agar LLM bisa membedakan
+        # peraturan desa yang sama dari desa berbeda.
+        # Ref: "Contextual Retrieval" (Sarfraz et al., 2024 - Anthropic)
+        metadata = doc.metadata
+        meta_header = (
+            f"[Sumber: {metadata.get('title', 'Unknown')}] "
+            f"[Desa: {metadata.get('village_name', 'unknown')}] "
+            f"[Kabupaten: {metadata.get('regency_name', 'unknown')}] "
+            f"[Nomor: {metadata.get('perdes_number', '?')}/{metadata.get('perdes_year', '?')}] "
+            f"[Halaman: {metadata.get('page', '?')}]"
+        )
+        context_block = f"{meta_header}\n{doc.page_content}"
+        context_texts.append(context_block)
+        sources.append({"content": doc.page_content, "metadata": metadata})
         
     # Gabungkan semua teks konteks dengan pemisah yang jelas
     context_joined = "\n\n---\n\n".join(context_texts)
@@ -356,7 +407,8 @@ def get_answer_from_rag(query: str, model_id: int = 1) -> dict:
     answer = hf_service.chat_with_context(
         user_question=query,
         context=context_joined,
-        model_id=model_id
+        model_id=model_id,
+        chat_history=chat_history
     )
     
     # Fallback jika API gagal atau mengembalikan None
@@ -365,5 +417,6 @@ def get_answer_from_rag(query: str, model_id: int = 1) -> dict:
     return {
         "answer": final_answer,
         "sources": sources,
-        "model_used": model_info["name"]
+        "model_used": model_info["name"],
+        "confidence_score": top_score
     }

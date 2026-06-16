@@ -5,6 +5,28 @@ from app.services.rag_service import get_answer_from_rag
 from app.services import chat_service
 from app.services.ragas_service import ragas_service
 
+# Maksimal jumlah pesan history yang dikirim ke LLM (3 pairs = 6 messages)
+# Terlalu banyak history bisa memenuhi context window dan memperlambat response
+MAX_HISTORY_MESSAGES = 6
+
+
+def _get_recent_history(session_id: int, max_messages: int = MAX_HISTORY_MESSAGES) -> list:
+    """
+    Mengambil riwayat percakapan terakhir dari session untuk konteks LLM.
+    Mengembalikan list of {role, content} dalam format yang siap dikirim ke LLM.
+    
+    Hanya mengambil N pesan terakhir agar tidak memenuhi context window.
+    """
+    try:
+        history = chat_service.get_formatted_chat_messages(session_id)
+        # Ambil hanya N pesan terakhir
+        if len(history) > max_messages:
+            history = history[-max_messages:]
+        return history
+    except Exception as e:
+        logger.warning(f"Gagal mengambil chat history: {e}")
+        return []
+
 
 def is_chitchat(text: str) -> bool:
     cleaned_text = text.lower().strip().replace(".", "").replace("!", "")
@@ -20,6 +42,73 @@ def is_chitchat(text: str) -> bool:
         
     return False
 
+
+# Keyword set untuk deteksi topik hukum/peraturan desa
+_LEGAL_KEYWORDS = {
+    # Struktur dokumen
+    'pasal', 'ayat', 'bab', 'bagian', 'huruf', 'angka', 'butir',
+    # Jenis peraturan
+    'peraturan', 'perdes', 'peraturan desa', 'undang-undang', 'uu',
+    'peraturan pemerintah', 'pp', 'perpres', 'perda',
+    # Istilah pemerintahan
+    'desa', 'kepala desa', 'bpd', 'kecamatan', 'kabupaten', 'pemerintah',
+    'pemerintahan', 'sekretaris', 'bendahara', 'musyawarah',
+    # Konten hukum
+    'kewajiban', 'hak', 'tugas', 'fungsi', 'wewenang', 'sanksi',
+    'ketentuan', 'larangan', 'kibbla', 'kesehatan', 'pendidikan',
+    'anggaran', 'dana', 'apbdes', 'pengelolaan', 'pengawasan',
+    # Pertanyaan umum tentang dokumen
+    'isi', 'bunyi', 'menurut', 'berdasarkan', 'dalam dokumen',
+    'perdes', 'mengatur', 'ditetapkan', 'berlaku',
+    # Definisi
+    'pengertian', 'definisi', 'yang dimaksud', 'adalah',
+}
+
+# Keyword set untuk deteksi off-topic yang jelas
+_OFF_TOPIC_KEYWORDS = {
+    # Kuliner
+    'resep', 'masak', 'masakan', 'bumbu', 'nasi', 'goreng', 'rendang',
+    # Hiburan
+    'film', 'lagu', 'musik', 'artis', 'selebriti', 'sinetron',
+    # Olahraga
+    'sepakbola', 'bola', 'olahraga', 'pemain', 'klub',
+    # Teknologi umum
+    'coding', 'programming', 'python', 'javascript', 'react',
+    # Cuaca
+    'cuaca', 'hujan', 'panas',
+    # Umum non-legal
+    'celebrity', 'gosip', 'viral', 'meme', 'tiktok',
+}
+
+
+def is_off_topic(text: str) -> bool:
+    """
+    Deteksi apakah pertanyaan user di luar topik peraturan desa.
+    
+    Strategi:
+    - Jika query mengandung LEGAL keywords → BUKAN off-topic (biarkan RAG)
+    - Jika query mengandung OFF-TOPIC keywords DAN TIDAK ada legal keywords → OFF-TOPIC
+    - Jika tidak ada keduanya → BUKAN off-topic (biarkan RAG + confidence threshold)
+    
+    Pendekatan ini LEBIH AMAN (lenient): hanya memblokir yang jelas off-topic.
+    Pertanyaan ambigu tetap dilewatkan ke RAG, lalu confidence threshold
+    yang akan memfilter jika memang tidak relevan.
+    """
+    lower_text = text.lower()
+    
+    # Cek apakah ada legal keywords dalam query
+    has_legal = any(kw in lower_text for kw in _LEGAL_KEYWORDS)
+    if has_legal:
+        return False
+    
+    # Cek apakah ada off-topic keywords
+    has_off_topic = any(kw in lower_text for kw in _OFF_TOPIC_KEYWORDS)
+    if has_off_topic:
+        return True
+    
+    # Default: bukan off-topic (biarkan confidence threshold yang memfilter)
+    return False
+
 def chat_with_history(session_id: int, user_id: int, user_question: str, model_id: int = 1, ground_truth: str = None) -> Tuple[Dict[str, Any], int]:
     try:
         logger.info(f"Processing chat for user {user_id}, session {session_id} with model_id {model_id}")
@@ -28,8 +117,23 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             answer = "Halo! Saya adalah asisten AI Anda. Ada yang bisa saya bantu terkait penelusuran dokumen atau peraturan hari ini?"
             rag_result = {"answer": answer, "sources": [], "model_used": "RuleBase Router"}
 
+        elif is_off_topic(user_question):
+            answer = (
+                "Maaf, saya hanya dapat menjawab pertanyaan terkait peraturan desa dan dokumen hukum. "
+                "Silakan ajukan pertanyaan tentang isi peraturan desa, pasal, kewajiban, hak, atau topik pemerintahan desa."
+            )
+            rag_result = {"answer": answer, "sources": [], "model_used": "OffTopicFilter"}
+
         else:
-            rag_result = get_answer_from_rag(user_question, model_id=model_id)
+            # Ambil riwayat percakapan terakhir agar LLM paham konteks follow-up
+            recent_history = _get_recent_history(session_id)
+            logger.info(f"Sending {len(recent_history)} history messages to RAG for context")
+            
+            rag_result = get_answer_from_rag(
+                user_question,
+                model_id=model_id,
+                chat_history=recent_history
+            )
         
         if not rag_result or not rag_result.get("answer"):
             return {"status": "error", "message": "Gagal mendapatkan respons dari sistem RAG"}, 500
