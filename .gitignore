@@ -22,11 +22,10 @@ notebooks/
 data/dataset/*
 data/dataset/
 data/chroma_db/
-data/raw/*.pdf
-data/raw/*.docx
-data/raw/*.txt
-data/processed/*
-!data/raw/.gitkeep
+# data/raw/*.pdf
+# data/raw/*.docx
+# data/raw/*.txt
+# !data/raw/.gitkeep
 !data/processed/.gitkeep
 
 # Logs

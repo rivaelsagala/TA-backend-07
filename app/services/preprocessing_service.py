@@ -117,11 +117,11 @@ def clean_legal_text(text: str) -> str:
     # TAHAP 3: Perbaikan OCR errors khusus dokumen hukum
     # ==============================================
     # Fix spaced-out keywords dari PDF layout (estetika judul):
-    # "t e n t a n g" → "tentang", "m e n i m b a n g" → "menimbang", dll.
-    # Tanpa ini, parser gagal mendeteksi keyword penting.
+    # "t e n t a n g" → "tentang", "p a s a l" → "pasal", dll.
+    # Tanpa ini, parser gagal mendeteksi keyword penting dan marker pasal.
     spaced_keywords = [
         'TENTANG', 'MENIMBANG', 'MENGINGAT', 'MEMUTUSKAN', 'MENETAPKAN',
-        'MEMPERHATIKAN'
+        'MEMPERHATIKAN', 'PASAL', 'BAB', 'BAGIAN'
     ]
     for kw in spaced_keywords:
         spaced_pattern = r'\s+'.join(list(kw))
@@ -141,6 +141,35 @@ def clean_legal_text(text: str) -> str:
     # Fix karakter aneh yang seharusnya angka di awal list
     text = re.sub(r'(?m)^p\s*s\s*', '1. ', text)
     text = re.sub(r'(?m)^/\s*', '7. ', text)  # Seringkali angka 7 miring dibaca garis miring
+
+    # Potong lampiran/tabel setelah kalimat penutup peraturan.
+    # Untuk RAG regulasi, lampiran tabel RPJM dan berita acara tidak ikut di-embedding
+    # karena format tabel PDF sering rusak dan mengotori chunk Pasal terakhir.
+    # Potong teks setelah kalimat penutup standar peraturan desa.
+    # Pola dibuat fleksibel: cukup match "agar setiap orang ... lembaran desa"
+    # tanpa mengandalkan frasa yang persis sama di setiap dokumen.
+    closing_match = re.search(
+        r'agar\s+setiap\s+orang\s+dapat\s+mengetahuinya',
+        text,
+        flags=re.IGNORECASE
+    )
+    if closing_match:
+        # Cari akhir kalimat penutup (titik atau akhir baris)
+        end_search = re.search(
+            r'menempatkannya\s+dalam\s+lembaran\s+desa\.?',
+            text[closing_match.start():],
+            flags=re.IGNORECASE
+        )
+        if end_search:
+            text = text[:closing_match.start() + end_search.end()]
+        else:
+            # Fallback: potong di titik akhir kalimat setelah "mengetahuinya"
+            rest = text[closing_match.end():]
+            period = re.search(r'\.', rest)
+            if period:
+                text = text[:closing_match.end() + period.end()]
+            else:
+                text = text[:closing_match.end()]
     
     # ==============================================
     # TAHAP 4: Penghapusan karakter aneh / noise
@@ -268,12 +297,27 @@ def clean_legal_text(text: str) -> str:
     text = re.sub(r'(?m)^kepala desa\s+\w+,?\s*$', '', text)
     # Hapus baris "sekretaris desa" yang berdiri sendiri
     text = re.sub(r'(?m)^sekretaris desa\s*$', '', text)
-    # Hapus nama orang yang berdiri sendiri setelah ttd (2-4 kata, semua huruf)
-    # Pola: baris dengan 2-4 kata yang semuanya huruf kapital/tidak, tanpa angka
-    # Ini heuristic — nama orang biasanya 2-4 kata tanpa tanda baca khusus
-    text = re.sub(r'(?m)^[a-z]+(?:\s+[a-z]+){1,3}\s*$', lambda m: '' if not any(kw in m.group() for kw in ['pasal', 'bab', 'ayat', 'huruf', 'angka', 'bagian', 'paragraf']) else m.group(), text)
+    # Jangan hapus baris 2-4 kata secara umum.
+    # Regex lama terlalu agresif dan bisa menghapus isi aturan pendek seperti
+    # "kepala desa" pada Pasal 4.
     # Hapus baris "berita daerah ..." yang merupakan footer
     text = re.sub(r'(?m)^berita daerah\s+.*$', '', text)
+    
+    # Hapus signature yang sudah tergabung oleh _merge_broken_lines:
+    # Pola: "<nama orang> ditetapkan/diundangkan di: <tempat> pada tanggal <tgl>"
+    # Contoh: "asep zaki kamil diundangkan di: desa biru pada tanggal 2 november 2016"
+    # Regex dibuat spesifik agar tidak menghapus isi pasal yang kebetulan
+    # mengandung "ditetapkan di" sebagai bagian kalimat regulasi.
+    # Hanya match jika ada pola promulgasi (nama tempat + tanggal).
+    text = re.sub(
+        r'(?m)^.*?\b(ditetapkan|diundangkan)\s+di\s*[:\s]\s*(?:desa|kota|kabupaten|kecamatan)\b.*$',
+        '', text
+    )
+    # Fallback: hapus baris yang DIMULAI dengan ditetapkan/diundangkan di (tanpa prefiks)
+    # Ini menangkap kasus dimana baris sudah bersih di baris terpisah
+    text = re.sub(r'(?m)^(ditetapkan|diundangkan)\s+di\s+.*$', '', text)
+    # Hapus nama orang yang mengandung gelar akademik (S.Sy, S.H., M.M., dll)
+    text = re.sub(r'(?m)^[a-z]+(?:[\s,]+[a-z\.]+){0,5}\s*,?\s*s\.\w+\.?\s*$', '', text)
     
     # ==============================================
     # TAHAP 9: Penghapusan KONJUNGSI berdiri sendiri
@@ -376,7 +420,9 @@ def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
             # Handle 2 format: "NOMOR : 5 TAHUN 2017" dan "NOMOR 5 TAHUN 2017"
             # Optional colon/dash separator antara NOMOR dan angka
             nomor_match = re.search(
-                r'NOMOR\s*[:\-]?\s*(\d+)\s+TAHUN\s+(\d{4})',
+                # Handle: "NOMOR 6 TAHUN 2015", "NOMOR : 01 TAHUN 2018",
+                # dan "NOMOR 6TAHUN 2015" (tanpa spasi antara angka dan TAHUN)
+                r'NOMOR\s*[:\-]?\s*(\d+)\s*TAHUN\s+(\d{4})',
                 upper_line
             )
             if nomor_match and perdes_number == "unknown":
@@ -606,9 +652,11 @@ def _parse_perdes_sections(text: str) -> list:
     current_bagian_title = ""
     
     # Temukan posisi semua PASAL
+    # Hanya match "pasal" diikuti ANGKA ARAB (bukan huruf/romawi).
+    # "pasal i", "pasal ii" adalah judul bab, bukan nomor pasal.
     pasal_positions = []
     for i, line in enumerate(lines):
-        if re.match(r'^\s*pasal\s+\d+\s*$', line, re.IGNORECASE):
+        if re.match(r'^\s*pasal\s+\d+\s*$', line.strip(), re.IGNORECASE):
             pasal_positions.append(i)
     
     if not pasal_positions:
@@ -631,8 +679,11 @@ def _parse_perdes_sections(text: str) -> list:
     
     # Scan line-by-line untuk BAB dan BAGIAN, proses setiap PASAL
     for pos in pasal_positions:
-        # Update state: scan backwards + forward untuk BAB/Bagian
-        # Scan dari awal dokumen sampai pasal ini
+        # Reset bagian state setiap kali masuk BAB baru.
+        # Scan dari awal dokumen sampai posisi pasal ini untuk mendapatkan
+        # BAB dan BAGIAN terkini. Bagian direset saat bertemu BAB baru.
+        temp_bagian = ""
+        temp_bagian_title = ""
         for i in range(pos):
             line = lines[i].strip()
             lower = line.lower()
@@ -649,19 +700,26 @@ def _parse_perdes_sections(text: str) -> list:
                         break
                 else:
                     current_bab_title = ""
+                # Reset bagian saat masuk BAB baru
+                temp_bagian = ""
+                temp_bagian_title = ""
             
             bagian_match = re.match(r'^bagian\s+(\w+)', lower)
             if bagian_match:
-                current_bagian = f"bagian {bagian_match.group(1)}"
+                temp_bagian = f"bagian {bagian_match.group(1)}"
                 # Ambil title: baris non-empty berikutnya yang BUKAN bab/bagian/pasal
                 for j in range(i + 1, min(i + 4, len(lines))):
                     candidate = lines[j].strip()
                     cl = candidate.lower()
                     if candidate and not re.match(r'^(bab|bagian|pasal)\s', cl):
-                        current_bagian_title = candidate
+                        temp_bagian_title = candidate
                         break
                 else:
-                    current_bagian_title = ""
+                    temp_bagian_title = ""
+        
+        # Update state global bagian dari hasil scan
+        current_bagian = temp_bagian
+        current_bagian_title = temp_bagian_title
         
         # Ekstrak nomor pasal
         pasal_line = lines[pos].strip().lower()
@@ -708,20 +766,45 @@ def _parse_perdes_sections(text: str) -> list:
             if re.match(r'^bagian\s+\w+', check_line):
                 actual_end -= 1
                 continue
-            # Title line: short line (< 60 chars) without numbered items,
-            # sitting between a Bagian header and the next Pasal
+            # Title line yang benar-benar milik BAB/Bagian berikutnya.
+            # Hanya hapus jika beberapa baris sebelumnya adalah header BAB/Bagian;
+            # jangan hapus semua baris pendek karena isi pasal bisa pendek juga.
             if (len(check_line) < 60 and
                 not re.match(r'^\d+[\.\)]\s', check_line) and
                 not re.match(r'^pasal\s+\d', check_line) and
                 not re.match(r'^[a-z][\.\)]\s', check_line)):
-                actual_end -= 1
-                continue
+                previous_nonempty = []
+                scan_idx = actual_end - 2
+                while scan_idx >= 0 and len(previous_nonempty) < 3:
+                    prev_line = pasal_lines[scan_idx].strip().lower()
+                    if prev_line:
+                        previous_nonempty.append(prev_line)
+                    scan_idx -= 1
+                if any(re.match(r'^(bab\s+[ivxlcdm]+|bagian\s+\w+)', prev) for prev in previous_nonempty):
+                    actual_end -= 1
+                    continue
             # This is actual pasal content — stop
             break
         
         pasal_lines = pasal_lines[:actual_end]
         
         pasal_content = '\n'.join(pasal_lines).strip()
+        if not pasal_content:
+            continue
+        
+        # ==========================================================
+        # Hapus blok tanda tangan / promulgasi yang bocor ke pasal
+        # terakhir. Potong content di titik dimana frasa promulgasi
+        # atau signature muncul.
+        # Pola yang ditangkap:
+        # - "ditetapkan di ..." / "diundangkan di ..."
+        # - "<nama orang> ditetapkan/diundangkan di: ..."
+        # - Nama orang dengan gelar ("aan kurniawan, s.sy")
+        # ==========================================================
+        pasal_content = re.split(
+            r'\n\s*(?:.*?\b(?:ditetapkan|diundangkan)\s+di\b)',
+            pasal_content
+        )[0].strip()
         if not pasal_content:
             continue
         
@@ -961,10 +1044,12 @@ def _normalize_letter_numbering(text: str) -> str:
         return f"{match.group(1)}{number}."
     
     # Konversi a. b. c. → 1. 2. 3.
+    # Hanya huruf a-n (14 item maks realistis untuk sub-item hukum).
+    # Huruf o,p,q,r,... sangat jarang jadi sub-item, lebih sering kata biasa.
     # Case 1: di awal baris — group(1)=whitespace, group(2)=huruf
-    text = re.sub(r'(?m)^(\s*)([a-z])\.(?=\s)', replace_letter_dot, text)
-    # Case 2: inline setelah : atau ; (e.g. "fungsi : a. item")
-    text = re.sub(r'(?<=[;:])(\s*)([a-z])\.(?=\s)', replace_letter_dot, text)
+    text = re.sub(r'(?m)^(\s*)([a-n])\.(?=\s)', replace_letter_dot, text)
+    # Case 2: inline setelah ": " atau "; " (spasi wajib ada setelah tanda baca)
+    text = re.sub(r'(?<=[;:])(\s+)([a-n])\.(?=\s)', replace_letter_dot, text)
     
     def replace_letter_paren(match):
         letter = match.group(2).lower()
@@ -973,9 +1058,9 @@ def _normalize_letter_numbering(text: str) -> str:
     
     # Konversi a) b) c) → 1) 2) 3) (format kurung tutup)
     # Case 1: di awal baris — group(1)=whitespace, group(2)=huruf
-    text = re.sub(r'(?m)^(\s*)([a-z])\)(?=\s)', replace_letter_paren, text)
-    # Case 2: inline setelah : atau ;
-    text = re.sub(r'(?<=[;:])(\s*)([a-z])\)(?=\s)', replace_letter_paren, text)
+    text = re.sub(r'(?m)^(\s*)([a-n])\)(?=\s)', replace_letter_paren, text)
+    # Case 2: inline setelah ": " atau "; "
+    text = re.sub(r'(?<=[;:])(\s+)([a-n])\)(?=\s)', replace_letter_paren, text)
     
     return text
 
