@@ -16,7 +16,7 @@ ENV/
 setting.py
 
 # Notebooks (includes all checkpoints)
-notebooks/
+# notebooks/
 
 # Data directories (exclude actual files but keep structure)
 data/dataset/*
