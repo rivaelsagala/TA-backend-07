@@ -12,7 +12,7 @@ from ragas.metrics import (
     answer_relevancy,
     context_precision,
     context_recall,
-    context_entity_recall,
+    # context_entity_recall,
     NoiseSensitivity
 )
 from dotenv import load_dotenv
@@ -100,7 +100,7 @@ class RagasEvaluationService:
             answer_relevancy,       # Apakah jawaban relevan dengan pertanyaan?
             context_precision,      # Apakah konteks relevan dan presisi? (butuh ground_truth)
             context_recall,         # Apakah konteks mencakup info di ground truth? (butuh ground_truth)
-            context_entity_recall,  # Apakah entitas penting dari ground truth ada di konteks? (butuh ground_truth)
+            # context_entity_recall,  # Apakah entitas penting dari ground truth ada di konteks? (butuh ground_truth)
             self.noise_sensitivity  # Seberapa sensitif model terhadap noise? (butuh ground_truth)
         ]
         
@@ -168,7 +168,7 @@ class RagasEvaluationService:
                 "answer_relevancy": float(result_dict.get("answer_relevancy", 0)),
                 "context_precision": float(result_dict.get("context_precision", 0)),
                 "context_recall": float(result_dict.get("context_recall", 0)),
-                "context_entity_recall": float(result_dict.get("context_entity_recall", 0)),
+                # "context_entity_recall": float(result_dict.get("context_entity_recall", 0)),
                 "noise_sensitivity": float(result_dict.get("noise_sensitivity", 0)),
             }
             
@@ -188,7 +188,7 @@ class RagasEvaluationService:
                 "answer_relevancy": 0,
                 "context_precision": 0,
                 "context_recall": 0,
-                "context_entity_recall": 0,
+                # "context_entity_recall": 0,
                 "noise_sensitivity": 0,
                 "average_score": 0
             }

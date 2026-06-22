@@ -1,0 +1,5 @@
+3. Adjacent Chunk Retrieval (Context Window Expansion)
+When a chunk is retrieved, the chunks before and after it often contain critical context (e.g., definitions, exceptions). Currently you only return the matched chunk in isolation.What to do: After retrieval, fetch chunk[i-1] and chunk[i+1] from the same document to provide fuller context. Store chunk_index in metadata for this.
+
+is chat greeting or not
+
