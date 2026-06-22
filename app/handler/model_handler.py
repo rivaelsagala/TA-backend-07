@@ -1,5 +1,5 @@
 from flask import jsonify
-from app.services.rag_service import hf_service
+from app.services.rag_service import hf_service, AVAILABLE_MODELS
 from loguru import logger
 
 def handle_load_finetuned_model():
@@ -29,20 +29,17 @@ def handle_load_finetuned_model():
 def handle_get_model_info():
     """Handler untuk mendapatkan informasi model yang tersedia"""
     try:
+        models = {}
+        for model_id, info in AVAILABLE_MODELS.items():
+            models[str(model_id)] = {
+                "name": info["name"],
+                "type": info["type"],
+                "description": f"{info['name']} ({info['type']})"
+            }
+        
         return jsonify({
             "status": "success",
-            "data": {
-                "original_model": {
-                    "name": hf_service.model,
-                    "description": "Llama 3.1 8B Instruct (Original)",
-                    "use_finetuned_model": False
-                },
-                "finetuned_model": {
-                    "name": hf_service.finetuned_model_name,
-                    "description": "Llama 3.1 8B Instruct Fine-tuned for Legal Documents",
-                    "use_finetuned_model": True
-                }
-            }
+            "data": models
         }), 200
     except Exception as e:
         logger.error(f"Error in handle_get_model_info: {str(e)}")

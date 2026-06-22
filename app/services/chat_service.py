@@ -55,17 +55,39 @@ def get_user_sessions(user_id: int):
         logger.error(f"Error get_user_sessions: {e}")
         return []
 
-def get_session_history(session_id: int):
-    """Mengambil history chat dalam session tertentu"""
+def get_session_history(session_id: int, limit: int = None):
+    """Mengambil history chat dalam session tertentu.
+    
+    Args:
+        session_id: ID session yang ingin diambil history-nya
+        limit: Jumlah row terakhir yang diambil. None = ambil semua (untuk frontend).
+               Set limit=5 untuk konteks LLM (5 rows = 10 messages: 5 user + 5 assistant).
+               Menghemat DB load: tidak fetch 200 rows jika hanya butuh 5.
+    """
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT id, user_query, llm_response, metadata, created_at 
-                    FROM chat_history 
-                    WHERE session_id = %s 
-                    ORDER BY created_at ASC
-                """, (session_id,))
+                if limit:
+                    # Subquery: ambil N rows terakhir (DESC), lalu urutkan balik ke ASC
+                    # agar hasilnya tetap kronologis (pesan lama → baru)
+                    cur.execute("""
+                        SELECT * FROM (
+                            SELECT id, user_query, llm_response, metadata, created_at 
+                            FROM chat_history 
+                            WHERE session_id = %s 
+                            ORDER BY created_at DESC
+                            LIMIT %s
+                        ) sub
+                        ORDER BY created_at ASC
+                    """, (session_id, limit))
+                else:
+                    # Ambil SEMUA history (untuk ditampilkan di frontend)
+                    cur.execute("""
+                        SELECT id, user_query, llm_response, metadata, created_at 
+                        FROM chat_history 
+                        WHERE session_id = %s 
+                        ORDER BY created_at ASC
+                    """, (session_id,))
                 
                 results = cur.fetchall()
                 for r in results:
@@ -75,9 +97,14 @@ def get_session_history(session_id: int):
         logger.error(f"Error get_session_history: {e}")
         return []
 
-def get_formatted_chat_messages(session_id: int):
-    """Mengambil history lalu memformatnya untuk konteks LLM"""
-    history = get_session_history(session_id)
+def get_formatted_chat_messages(session_id: int, limit: int = None):
+    """Mengambil history lalu memformatnya untuk konteks LLM
+    
+    Args:
+        session_id: ID session
+        limit: Jumlah row terakhir. None = semua (frontend), N = untuk LLM context.
+    """
+    history = get_session_history(session_id, limit=limit)
     formatted_messages = []
     for msg in history:
         formatted_messages.append({"role": "user", "content": msg["user_query"]})

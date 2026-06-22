@@ -27,3 +27,13 @@ CREATE TABLE chat_history (
 CREATE INDEX idx_chat_history_session ON chat_history(session_id);
 CREATE INDEX idx_chat_history_user ON chat_history(user_id);
 CREATE INDEX idx_chat_sessions_user ON chat_sessions(user_id);
+
+CREATE TABLE chunks_perdes (
+    id SERIAL PRIMARY KEY,
+    file_name VARCHAR(255),
+    content TEXT,
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_chunks_perdes_file_name ON chunks_perdes(file_name);

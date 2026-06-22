@@ -18,6 +18,11 @@ def handle_chat():
     # 2: Qwen/Qwen2.5-7B-Instruct
     # 3: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
     # 4: model_merged_legal (fine-tuned)
+    # 5: openai/gpt-4o-mini
+    # 6: openai/gpt-3.5-turbo
+    # 7: maia/gemini-2.0-flash
+    # 8: rivaelsagala/TA-llama-3-1-8-b-finetune
+    # 9: model_merged_raft_perdes (RAFT)
     model_id = data.get('model_id', 1)
     
     # Ambil ground_truth (jawaban pakar) dari request body (opsional).
@@ -26,12 +31,18 @@ def handle_chat():
     # berjalan tapi metrik berbasis ground_truth tidak valid.
     ground_truth = data.get('ground_truth', None)
     
+    # Flag untuk mengontrol apakah evaluasi RAGAS dijalankan atau tidak.
+    # Default: False (tidak dijalankan) agar response lebih cepat.
+    # Set True jika ingin mengevaluasi kualitas RAG pada request tertentu.
+    evaluate = data.get('evaluate', False)
+    
     response_data, status_code = chat_with_history(
         session_id=data['session_id'],
         user_id=data['user_id'],
         user_question=data['message'],
         model_id=model_id,
-        ground_truth=ground_truth
+        ground_truth=ground_truth,
+        evaluate=evaluate
     )
     return jsonify(response_data), status_code
 
