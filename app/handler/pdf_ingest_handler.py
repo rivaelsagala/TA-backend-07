@@ -4,28 +4,29 @@ from werkzeug.utils import secure_filename
 from app.usecases.embedding_use_case import ingest_pdf_to_vector_db
 
 def handle_generate_embedding():
-    # Validasi request multipart/form-data
     if 'file' not in request.files:
         return jsonify({"error": "Key 'file' tidak ditemukan dalam request"}), 400
         
     file = request.files['file']
     if file.filename == '':
         return jsonify({"error": "Tidak ada file PDF yang dipilih"}), 400
+
+    # Tangkap parameter save_to_db dari form-data (default: true agar tidak merusak sistem lama)
+    save_to_db_str = request.form.get('save_to_db', 'true').lower()
+    save_to_db = save_to_db_str in ['true', '1', 'yes']
         
     if file and file.filename.endswith('.pdf'):
         filename = secure_filename(file.filename)
         
-        # Simpan file sementara (bisa buat folder temp/ jika belum ada)
         temp_dir = os.path.join(os.getcwd(), 'temp')
         os.makedirs(temp_dir, exist_ok=True)
         filepath = os.path.join(temp_dir, filename)
         
         file.save(filepath)
         
-        # Panggil usecase
-        result = ingest_pdf_to_vector_db(filepath, filename)
+        # Panggil usecase dengan parameter save_to_db
+        result = ingest_pdf_to_vector_db(filepath, filename, save_to_db)
         
-        # Bersihkan file sementara setelah selesai di-embed
         if os.path.exists(filepath):
             os.remove(filepath)
             
