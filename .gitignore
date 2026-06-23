@@ -19,8 +19,8 @@ setting.py
 # notebooks/
 
 # Data directories (exclude actual files but keep structure)
-data/dataset/*
-data/dataset/
+# data/dataset/*
+# data/dataset/
 data/chroma_db/
 # data/raw/*.pdf
 # data/raw/*.docx
