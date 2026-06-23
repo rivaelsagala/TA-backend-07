@@ -161,28 +161,43 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
         else:
             logger.info(f"RAGAS evaluation skipped (evaluate=False) for model_id={model_id}")
             
-        # 5. Simpan Pertanyaan dan Jawaban ke dalam PostgreSQL (chat_history)
+        # 5. Ekstraksi Similarity Score tertinggi (QA: diambil dari chunk paling relevan urutan ke-1)
+        similarity_score = None
+        sources = rag_result.get("sources", [])
+        if sources and isinstance(sources, list) and isinstance(sources[0], dict):
+            # Mencari key 'score' atau 'similarity' dari metadata vector DB
+            similarity_score = sources[0].get("score") or sources[0].get("similarity")
+            if similarity_score is not None:
+                similarity_score = float(similarity_score)
+
+        # 6. Simpan Pertanyaan, Jawaban, dan Metrik ke dalam PostgreSQL (chat_history)
         metadata = {
-            "sources": rag_result.get("sources", []),
-            "evaluation": evaluation_result,
+            "sources": sources,
             "model_used": rag_result.get("model_used", "Unknown Model"),
-            "analysis": rag_result.get("analysis")  # RAFT thought_process (None untuk model lain)
+            "analysis": rag_result.get("analysis")  # RAFT thought_process
         }
+        
+        # QA Note: evaluation_result tidak perlu lagi di-dump mentah ke metadata 
+        # karena sekarang sudah masuk ke dalam schema kolom yang memiliki tipe data spesifik (FLOAT).
+        
         chat_service.save_chat_message(
             session_id=session_id, 
             user_id=user_id, 
             user_query=user_question, 
             llm_response=rag_result["answer"], 
-            metadata=metadata
+            metadata=metadata,
+            evaluation=evaluation_result,         # Kirim dictionary dari RAGAS
+            similarity_score=similarity_score     # Kirim float similarity
         )
         
-        # Build response — sertakan analysis jika ada (khusus model RAFT fine-tuned)
+        # Build response
         response_body = {
             "status": "success",
             "message": "Jawaban berhasil diproses",
             "answer": rag_result["answer"],
-            "sources": rag_result.get("sources", []),
+            "sources": sources,
             "evaluation": evaluation_result,
+            "similarity_score": similarity_score, # Optional: tampilkan juga di response API
             "model_used": rag_result.get("model_used", "Unknown Model")
         }
         

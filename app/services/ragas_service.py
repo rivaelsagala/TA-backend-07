@@ -173,9 +173,9 @@ class RagasEvaluationService:
             }
             
             # Rata-rata dari seluruh metrik
-            formatted_result["average_score"] = round(
-                sum(formatted_result.values()) / len(formatted_result), 4
-            )
+            # formatted_result["average_score"] = round(
+            #     sum(formatted_result.values()) / len(formatted_result), 4
+            # )
             
             logger.info(f"Evaluation completed: {formatted_result}")
             return formatted_result
@@ -190,7 +190,7 @@ class RagasEvaluationService:
                 "context_recall": 0,
                 # "context_entity_recall": 0,
                 "noise_sensitivity": 0,
-                "average_score": 0
+                # "average_score": 0
             }
     
     def format_contexts_from_sources(self, sources: List[Dict[str, Any]]) -> List[str]:

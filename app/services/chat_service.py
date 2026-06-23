@@ -139,18 +139,41 @@ def delete_session(session_id: int):
         logger.error(f"Error delete_session: {e}")
         return False
 
-def save_chat_message(session_id: int, user_id: int, user_query: str, llm_response: str, metadata: dict):
-    """Simpan pesan chat baru"""
+def save_chat_message(
+    session_id: int, 
+    user_id: int, 
+    user_query: str, 
+    llm_response: str, 
+    metadata: dict, 
+    evaluation: dict = None, 
+    similarity_score: float = None
+):
+    """Simpan pesan chat baru beserta metrik evaluasi RAGAS dan Similarity Score"""
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Ubah dictionary metadata menjadi JSON string agar cocok dengan tipe data JSONB di Postgres
+                # Ubah dictionary metadata menjadi JSON string
                 metadata_json = json.dumps(metadata) if metadata else None
                 
+                # Ekstrak nilai evaluasi jika evaluate=True (menghindari error jika evaluate=False/None)
+                faithfulness = evaluation.get("faithfulness") if evaluation else None
+                answer_relevance = evaluation.get("answer_relevancy") if evaluation else None # Mapping key Ragas ke DB
+                context_precision = evaluation.get("context_precision") if evaluation else None
+                context_recall = evaluation.get("context_recall") if evaluation else None
+                noise_sensitivity = evaluation.get("noise_sensitivity") if evaluation else None
+                
                 cur.execute("""
-                    INSERT INTO chat_history (session_id, user_id, user_query, llm_response, metadata, created_at)
-                    VALUES (%s, %s, %s, %s, %s, NOW())
-                """, (session_id, user_id, user_query, llm_response, metadata_json))
+                    INSERT INTO chat_history (
+                        session_id, user_id, user_query, llm_response, metadata, created_at,
+                        faithfulness, answer_relevance, context_precision, context_recall, 
+                        noise_sensitivity, similarity_score
+                    )
+                    VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s)
+                """, (
+                    session_id, user_id, user_query, llm_response, metadata_json,
+                    faithfulness, answer_relevance, context_precision, context_recall, 
+                    noise_sensitivity, similarity_score
+                ))
                 
                 # Update waktu session agar selalu muncul paling atas saat chat aktif
                 cur.execute("UPDATE chat_sessions SET updated_at = NOW() WHERE id = %s", (session_id,))
