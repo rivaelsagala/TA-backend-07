@@ -37,3 +37,29 @@ CREATE TABLE chunks_perdes (
 );
 
 CREATE INDEX idx_chunks_perdes_file_name ON chunks_perdes(file_name);
+
+
+
+
+-- Membuat tabel khusus untuk menyimpan hasil metrik RAGAS
+CREATE TABLE chat_evaluations (
+    id SERIAL PRIMARY KEY,
+    chat_history_id INTEGER UNIQUE NOT NULL REFERENCES chat_history(id) ON DELETE CASCADE,
+    faithfulness FLOAT,
+    answer_relevance FLOAT,
+    context_precision FLOAT,
+    context_recall FLOAT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index untuk mempercepat pencarian data evaluasi berdasarkan history chat
+CREATE INDEX idx_chat_evaluations_history ON chat_evaluations(chat_history_id);
+
+
+ALTER TABLE chat_history
+ADD COLUMN faithfulness FLOAT DEFAULT NULL,
+ADD COLUMN answer_relevance FLOAT DEFAULT NULL,
+ADD COLUMN context_precision FLOAT DEFAULT NULL,
+ADD COLUMN context_recall FLOAT DEFAULT NULL,
+ADD COLUMN noise_sensitivity FLOAT DEFAULT NULL,
+ADD COLUMN similarity_score FLOAT DEFAULT NULL;
