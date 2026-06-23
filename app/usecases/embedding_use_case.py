@@ -6,30 +6,13 @@ from app.services.embedding_service import (
     delete_document_chunks
 )
 
-def ingest_pdf_to_vector_db(file_path: str, original_filename: str):
-    """
-    Pipeline lengkap untuk memproses PDF peraturan desa:
-    1. Ekstrak teks + chunking dengan metadata enrichment
-    2. Pastikan setiap chunk memiliki metadata lengkap untuk disambiguasi
-    3. CEK DUPLIKASI: hapus chunks lama jika dokumen sama sudah ada
-    4. Simpan chunks baru ke Supabase Vector DB
-    
-    Duplicate Handling:
-    - Jika dokumen dengan document_id yang sama sudah ada di database,
-      chunks lama akan DIHAPUS dulu sebelum chunks baru disimpan.
-    - Ini mencegah duplikasi embedding dan memastikan selalu menggunakan versi terbaru.
-    """
+def ingest_pdf_to_vector_db(file_path: str, original_filename: str, save_to_db: bool = True):
     try:
-        # Langkah 1: Ekstrak dan Chunking PDF (sudah termasuk metadata enrichment)
-        chunks = extract_and_chunk_pdf(file_path)
+        # Lempar parameter ke fungsi ekstraksi
+        chunks = extract_and_chunk_pdf(file_path, save_to_db)
         
-        # Langkah 2: Pastikan setiap chunk memiliki metadata lengkap
-        # Ini adalah safety net jika ada metadata yang belum terisi
         for chunk in chunks:
             chunk.metadata['source_file'] = original_filename
-            
-            # Pastikan field metadata penting ada
-            # (extract_text_from_pdf seharusnya sudah mengisi ini)
             if 'document_id' not in chunk.metadata:
                 chunk.metadata['document_id'] = f"file_{original_filename.replace('.pdf', '')}"
             if 'village_name' not in chunk.metadata:
@@ -39,31 +22,28 @@ def ingest_pdf_to_vector_db(file_path: str, original_filename: str):
             if 'perdes_year' not in chunk.metadata:
                 chunk.metadata['perdes_year'] = 'unknown'
         
-        # Langkah 3: CEK DUPLIKASI — hapus chunks lama jika dokumen sudah ada
         document_id = chunks[0].metadata.get('document_id', 'unknown') if chunks else 'unknown'
         existing_count = check_document_exists(document_id)
         
-        if existing_count > 0:
-            logger.info(f"Dokumen '{document_id}' sudah ada ({existing_count} chunks). Menghapus versi lama...")
-            deleted = delete_document_chunks(document_id)
-            logger.info(f"Berhasil menghapus {deleted} chunks lama untuk '{document_id}'")
+        # Eksekusi penyimpanan hanya jika save_to_db == True
+        if save_to_db:
+            if existing_count > 0:
+                logger.info(f"Dokumen '{document_id}' sudah ada ({existing_count} chunks). Menghapus versi lama...")
+                delete_document_chunks(document_id)
+            
+            store_chunks_to_supabase(chunks)
+            message = f"Berhasil memproses dokumen {original_filename} menjadi {len(chunks)} chunks ke database."
         else:
-            logger.info(f"Dokumen '{document_id}' belum ada di database. Menyimpan sebagai dokumen baru.")
-        
-        # Langkah 4: Lakukan Embedding dan Simpan ke database
-        store_chunks_to_supabase(chunks)
-        
+            message = f"PREVIEW MODE: Dokumen {original_filename} diekstrak menjadi {len(chunks)} chunks (TIDAK disimpan ke DB)."
+
         return {
             "status": "success", 
-            "message": f"Berhasil memproses dokumen {original_filename} menjadi {len(chunks)} chunks ke database.",
+            "message": message,
             "metadata": {
                 "total_chunks": len(chunks),
                 "document_id": document_id,
-                "village_name": chunks[0].metadata.get('village_name', 'unknown') if chunks else 'unknown',
-                "perdes_number": chunks[0].metadata.get('perdes_number', 'unknown') if chunks else 'unknown',
-                "perdes_year": chunks[0].metadata.get('perdes_year', 'unknown') if chunks else 'unknown',
-                "replaced_existing": existing_count > 0,
-                "previous_chunks_deleted": existing_count
+                "saved_to_db": save_to_db,
+                "replaced_existing": existing_count > 0 if save_to_db else False
             }
         }
     except Exception as e:

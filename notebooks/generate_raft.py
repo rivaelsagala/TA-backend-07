@@ -907,7 +907,7 @@ if __name__ == "__main__":
     # --- KONFIGURASI FILE ---
     # Set ke nama file untuk proses 1 file saja, atau None untuk semua file di folder
     # Contoh: "PERATURAN_DESA_BIRU_NOMOR_07_TAHUN_2015_chunks.json"
-    SINGLE_FILE = "KEPALA_DESA_KABUPATEN_BANDUNG_NOMOR_01_TAHUN_2018_T_E_N_T_A_N_G_RENCANA_PEMBANGUNAN_JANGKA_MENENGAH_DESA_RPJM_DESA_DESA_CIPEDES_KECAMATAN_PASEH_KABUPATEN_BANDUNG_chunks.json"  # Ubah ke nama file untuk proses satu file saja
+    SINGLE_FILE = "PERATURAN_DESA_DRAWATI_KECAMATAN_PASEH_KABUPATEN_BANDUNG_NOMOR_03_TAHUN_2018_chunks.json"  # Ubah ke nama file untuk proses satu file saja
 
     if SINGLE_FILE:
         single_path = PROCESSED_DIR / SINGLE_FILE

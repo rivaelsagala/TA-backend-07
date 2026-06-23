@@ -1389,23 +1389,25 @@ def export_finetune_dataset(chunks: list, file_path: str) -> str:
     return jsonl_path
 
 
-def extract_and_chunk_pdf(file_path: str):
+def extract_and_chunk_pdf(file_path: str, save_to_db: bool = True):
 
     documents = extract_text_from_pdf(file_path)
     chunks = chunk_documents(documents)
+    
+    # Tetap simpan ke folder lokal (txt & json) agar Anda bisa mereview hasilnya
     save_results_to_folder(file_path, documents, chunks)
     
-    # Ekspor dataset fine-tune
-    export_finetune_dataset(chunks, file_path)
-
-    postgres_saved = save_chunks_to_postgres(chunks)
-    if postgres_saved:
-        logger.info(f"Chunks untuk '{os.path.basename(file_path)}' berhasil disimpan ke tabel chunks_perdes.")
+    # Hanya eksekusi simpan ke DB dan Finetune jika save_to_db True
+    if save_to_db:
+        export_finetune_dataset(chunks, file_path)
+        postgres_saved = save_chunks_to_postgres(chunks)
+        if postgres_saved:
+            logger.info(f"Chunks untuk '{os.path.basename(file_path)}' berhasil disimpan ke tabel chunks_perdes.")
+        else:
+            logger.warning(
+                f"Chunks untuk '{os.path.basename(file_path)}' tidak tersimpan ke tabel chunks_perdes. "
+            )
     else:
-        logger.warning(
-            f"Chunks untuk '{os.path.basename(file_path)}' tidak tersimpan ke tabel chunks_perdes. "
-            "Cek log koneksi DB, keberadaan tabel, dan kredensial PostgreSQL."
-        )
+        logger.info(f"Preview Mode: Ekstraksi '{os.path.basename(file_path)}' selesai. Melewati penyimpanan ke DB.")
 
     return chunks
-
