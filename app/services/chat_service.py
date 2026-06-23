@@ -17,15 +17,15 @@ def get_db_connection():
         password=os.getenv("DB_PASSWORD", "")
     )
 
-def create_chat_session(user_id: int, session_name: str):
-    """Membuat session chat baru"""
+def create_chat_session(user_id: int, session_name: str, evaluate: bool = False):
+    """Membuat session chat baru beserta flag evaluate"""
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO chat_sessions (user_id, session_name, created_at, updated_at)
-                    VALUES (%s, %s, NOW(), NOW()) RETURNING id
-                """, (user_id, session_name))
+                    INSERT INTO chat_sessions (user_id, session_name, evaluate, created_at, updated_at)
+                    VALUES (%s, %s, %s, NOW(), NOW()) RETURNING id
+                """, (user_id, session_name, evaluate))
                 session_id = cur.fetchone()[0]
                 conn.commit()
                 return session_id
@@ -34,19 +34,19 @@ def create_chat_session(user_id: int, session_name: str):
         return None
 
 def get_user_sessions(user_id: int):
-    """Mengambil semua session milik user"""
+    """Mengambil semua session milik user termasuk status evaluate"""
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Tambahkan 'evaluate' di dalam klausa SELECT
                 cur.execute("""
-                    SELECT id, session_name, created_at, updated_at 
+                    SELECT id, session_name, evaluate, created_at, updated_at 
                     FROM chat_sessions 
                     WHERE user_id = %s 
                     ORDER BY updated_at DESC
                 """, (user_id,))
                 
                 results = cur.fetchall()
-                # Format datetime agar bisa di-parse jadi JSON
                 for r in results:
                     if r.get('created_at'): r['created_at'] = r['created_at'].isoformat()
                     if r.get('updated_at'): r['updated_at'] = r['updated_at'].isoformat()
@@ -54,6 +54,36 @@ def get_user_sessions(user_id: int):
     except Exception as e:
         logger.error(f"Error get_user_sessions: {e}")
         return []
+
+def update_session(session_id: int, new_name: str = None, evaluate: bool = None):
+    """Update nama session dan/atau status evaluate"""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                if new_name is not None and evaluate is not None:
+                    cur.execute("""
+                        UPDATE chat_sessions 
+                        SET session_name = %s, evaluate = %s, updated_at = NOW() 
+                        WHERE id = %s
+                    """, (new_name, evaluate, session_id))
+                elif new_name is not None:
+                    cur.execute("""
+                        UPDATE chat_sessions 
+                        SET session_name = %s, updated_at = NOW() 
+                        WHERE id = %s
+                    """, (new_name, session_id))
+                elif evaluate is not None:
+                    cur.execute("""
+                        UPDATE chat_sessions 
+                        SET evaluate = %s, updated_at = NOW() 
+                        WHERE id = %s
+                    """, (evaluate, session_id))
+                
+                conn.commit()
+                return True
+    except Exception as e:
+        logger.error(f"Error update_session: {e}")
+        return False
 
 def get_session_history(session_id: int, limit: int = None):
     """Mengambil history chat dalam session tertentu.

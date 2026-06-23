@@ -211,10 +211,10 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
         logger.error(f"Error in chat_with_history: {str(e)}")
         return {"status": "error", "message": f"Server error: {str(e)}"}, 500
     
-def create_new_session(user_id: int, session_name: str) -> Tuple[Dict[str, Any], int]:
-    session_id = chat_service.create_chat_session(user_id, session_name)
+def create_new_session(user_id: int, session_name: str, evaluate: bool = False) -> Tuple[Dict[str, Any], int]:
+    session_id = chat_service.create_chat_session(user_id, session_name, evaluate)
     if session_id:
-        return {"status": "success", "data": {"id": session_id, "session_name": session_name}}, 200
+        return {"status": "success", "data": {"id": session_id, "session_name": session_name, "evaluate": evaluate}}, 200
     return {"status": "error", "message": "Gagal membuat session"}, 500
 
 def get_user_sessions(user_id: int) -> Tuple[Dict[str, Any], int]:
@@ -225,10 +225,13 @@ def get_session_history(session_id: int) -> Tuple[Dict[str, Any], int]:
     history = chat_service.get_session_history(session_id)
     return {"status": "success", "data": history}, 200
 
-def update_session_name(session_id: int, new_name: str) -> Tuple[Dict[str, Any], int]:
-    success = chat_service.update_session_name(session_id, new_name)
+def update_session_details(session_id: int, data: dict) -> Tuple[Dict[str, Any], int]:
+    new_name = data.get('session_name')
+    evaluate = data.get('evaluate')
+    
+    success = chat_service.update_session(session_id, new_name, evaluate)
     if success:
-        return {"status": "success", "message": "Nama session berhasil diupdate"}, 200
+        return {"status": "success", "message": "Session berhasil diupdate"}, 200
     return {"status": "error", "message": "Gagal mengupdate session"}, 500
 
 def delete_session(session_id: int) -> Tuple[Dict[str, Any], int]:
