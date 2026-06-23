@@ -72,7 +72,7 @@ def get_session_history(session_id: int, limit: int = None):
                     # agar hasilnya tetap kronologis (pesan lama → baru)
                     cur.execute("""
                         SELECT * FROM (
-                            SELECT id, user_query, llm_response, metadata, created_at 
+                            SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, similarity_score
                             FROM chat_history 
                             WHERE session_id = %s 
                             ORDER BY created_at DESC
@@ -83,7 +83,7 @@ def get_session_history(session_id: int, limit: int = None):
                 else:
                     # Ambil SEMUA history (untuk ditampilkan di frontend)
                     cur.execute("""
-                        SELECT id, user_query, llm_response, metadata, created_at 
+                        SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, similarity_score
                         FROM chat_history 
                         WHERE session_id = %s 
                         ORDER BY created_at ASC
