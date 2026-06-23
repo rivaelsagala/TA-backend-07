@@ -28,14 +28,16 @@ tambahan lembaran negara republik indonesia nomor 4286);
 4. undang-undang nomor 33 tahun 2004 tentang perimbangan keuangan antara pemerintah pusat dengan pemerintah daerah (lembaran negara republik indonesia tahun 2004 nomor 126,
 tambahan lembaran negara republik indonesia nomor 4438);
 
-5. undang-undang nomor 28 tahun 2009 tentang pajak daerah dan retribusi daerah (lembaran negara republik indonesia tahun 2009 nomor 130, tambahan lembaran negara republik indonesia nomor 5049);
+5. undang-undang nomor 28 tahun 2009 tentang pajak daerah dan retribusi daerah (lembaran negara republik indonesia tahun 2009 nomor 130, tambahan lembaran negara republik indonesia nomor
+5049);
 
 6. undang-undang nomor 6 tahun 2014 tentang desa (lembaran negara republik indonesia tahun 2014 nomor 7, tambahan lembaran negara republik indonesia nomor 5495);
 
 7. undang-undang nomor 23 tahun 2014 tentang pemerintahan daerah (lembaran negara republik indonesia tahun 2014 nomor 244,
 tambahan lembaran negara republik indonesia nomor 5587);
 
-8. peraturan pemerintah nomor 55 tahun 2005 tentang dana perimbangan (lembaran negara republik indonesia tahun 2005 nomor 137, tambahan lembaran negara republik indonesia nomor 4575);
+8. peraturan pemerintah nomor 55 tahun 2005 tentang dana perimbangan (lembaran negara republik indonesia tahun 2005 nomor 137, tambahan lembaran negara republik indonesia nomor
+4575);
 
 9. peraturan pemerintah nomor 79 tahun 2005 tentang pedoman pembinaan dan pengawasan atas penyelenggaraan pemerintah daerah (lembaran negara republik indonesia tahun 2005 nomor 165,
 tambahan lembaran negara republik indonesia nomor 4593);
@@ -59,7 +61,8 @@ tambahan lembaran negara republik indonesia nomor 5539);
 
 18. peraturan menteri dalam negeri nomor 84 tahun 2015 tentang susunan organisasi dan tata kerja pemerintah desa (berita negara republik indonesia tahun 2016 nomor 6);
 
-19. peraturan daerah provinsi jawa barat nomor 17 tahun 2017 tentang anggaran pendapatan dan belanja daerah provinsi jawa barat tahun 2018 (lembaran daerah provinsi jawa barat tahun 2017 nomor 17 seri );
+19. peraturan daerah provinsi jawa barat nomor 17 tahun 2017 tentang anggaran pendapatan dan belanja daerah provinsi jawa barat tahun
+2018 (lembaran daerah provinsi jawa barat tahun 2017 nomor 17 seri );
 
 20. peraturan gubernur jawa barat nomor 91 tahun 2017 tentang penjabaran anggaran pendapatan dan belanja daerah provinsi jawa barat tahun 2017 (lembaran daerah provinsi jawa barat tahun 2018 nomor seri );
 
@@ -107,6 +110,12 @@ tentang penetapan besaran alokasi dana perimbangan desa di kabupaten bandung tah
 40. peraturan desa loa nomor 01 tahun 2017 tentang pembentukan struktur organisasi perangkat desa loa;
 
 41. peraturan desa loa nomor 04 tahun 2017 tentang kewenangan desa loa
+
+dengan kesepakatan bersama
+
+badan permusyawaratan desa loa
+
+memutuskan
 
 menetapkan : peraturan desa loa tentang rencana kerja pembangunan desa (rkp-desa) tahun anggaran 2017
 
@@ -190,6 +199,8 @@ b. penyusunan rkp desa.
 (2) rpjm desa sebagaimana dimaksud pada ayat (1) huruf a, ditetapkan dalam jangka waktu paling lama 3 (tiga) bulan terhitung sejak pelantikan kepala desa.
 
 (3) rkp desa mulai disusun oleh pemerintah desa pada bulan juli tahun berjalan.
+
+penyusunan rpjm desa
 
 pasal 6
 
@@ -325,6 +336,8 @@ pasal 7
 (1) kepala desa menyelenggarakan penyusunan rpjm desa dengan mengikutsertakan unsur masyarakat desa.
 (2) penyusunan rpjm desa sebagaimana dimaksud pada ayat (1) dilaksanakan dengan mempertimbangkan kondisi objektif desa dan prioritas program dan kegiatan kabupaten/kota.
 
+penyusunan rkp desa
+
 pasal 8
 
 (1) pemerintah desa menyusun rkp desa sebagai penjabaran rpjm desa.
@@ -419,10 +432,14 @@ pasal 16
 
 (3) percepatan perencanaan pembangunan sebagaimana dimaksud pada ayat (2) untuk memastikan apb desa ditetapkan pada 31 desember tahun berjalan.
 
+pencermatan ulang rpjm desa
+
 pasal 17
 
 (1) tim penyusunan rkp desa mencermati skala prioritas usulan rencana kegiatan pembangunan desa untuk 1 (satu) tahun anggaran berikutnya sebagaimana tercantum dalam dokumen rpjm desa.
 (2) hasil pencermatan sebagaimana dimaksud pada ayat (1), menjadi dasar bagi tim penyusun rkp desa dalam menyusun rancangan rkp desa.
+
+penyusunan rancangan rkp desa
 
 pasal 18
 
@@ -536,6 +553,8 @@ pasal 47, dituangkan dalam berita acara.
 (4) kepala desa menyusun rancangan peraturan desa tentang rpjm desa sebagaimana dimaksud pada ayat (3).
 (5) rancangan peraturan desa tentang rkp desa sebagaimana dimaksud pada ayat (4) dibahas dan disepakati bersama oleh kepala desa dan badan permusyawaratan desa untuk ditetapkan menjadi peraturan desa tentang rkp desa.
 
+perubahan rkp desa
+
 pasal 28
 
 (1) rkp desa dapat diubah dalam hal:
@@ -599,6 +618,7 @@ pasal 33
 (1) kepala desa mengoordinasikan pelaksanaan program sektor dan/atau program daerah yang didelegasikan pelaksanaannya kepada desa.
 (2) pelaksanaan program sektor dan/atau program daerah sebagaimana dimaksud pada ayat (1) dilakukan oleh perangkat desa dan/atau unsur masyarakat desa sesuai dengan ketentuan yang berlaku.
 
+tahapan persiapan
 pasal 34
 
 tahapan persiapan meliputi:
@@ -610,6 +630,8 @@ e. penyiapan dokumen administrasi;
 f. pengadaan tenaga kerja; dan
 g. pengadaan bahan/material.
 
+penetapan pelaksana kegiatan
+
 pasal 35
 
 (1) kepala desa memeriksa daftar calon pelaksana kegiatan yang tercantum dalam dokumen rkp desa yang ditetapkan dalam apb desa.
@@ -619,6 +641,8 @@ pasal 35
 pasal 36
 
 pelaksana kegiatan bertugas membantu kepala desa dalam tahapan persiapan dan tahapan pelaksanaan kegiatan.
+
+penyusunan rencana kerja
 
 pasal 37
 
@@ -635,6 +659,8 @@ g. daftar pelaksana kegiatan.
 
 (3) rencana kerja sebagaimana dimaksud pada ayat (1), dituangkan dalam format rencana kerja untuk ditetapkan dengan keputusan kepala desa;
 
+sosialisasi kegiatan
+
 pasal 38
 
 (1) kepala desa menginformasikan dokumen rkp desa, apb desa dan rencana kerja kepada masyarakat melalui sosialisasi kegiatan.
@@ -647,6 +673,8 @@ c. musyawarah kelompok;
 d. sistem informasi desa berbasis website;
 e. papan informasi desa; dan
 f. media lain sesuai kondisi desa.
+
+pembekalan pelaksana kegiatan
 
 pasal 39
 
@@ -680,6 +708,8 @@ antara lain teknis administrasi kesekretariatan, pendataan, penetapan dan penega
 (4) kegiatan pembekalan pembangunan desa sebagaimana dimaksud pada ayat (1) huruf c seperti pendayagunaan teknologi tepat guna dalam pengelolaan sumber daya lokal, mekanisme pengadaan barang dan jasa, penyusunan laporan pelaksanaan kegiatan dan pengelolaan informasi desa.
 
 (5) ketentuan lebih lanjut mengenai pembekalan sebagaimana dimaksud pada ayat (1) diatur lebih lanjut oleh bupati/walikota dalam peraturan bupati/walikota.
+
+penyiapan dokumen administrasi kegiatan
 
 pasal 41
 
@@ -761,6 +791,7 @@ pasal 48
 (2) dalam hal mekanisme swakelola sebagaimana dimaksud pada ayat (1) tidak dapat dilakukan oleh kepala desa, diselenggarakan pengadaan barang dan/atau jasa.
 (3) pengadaan barang dan/atau jasa di desa sebagaimana dimaksud pada ayat (2) diatur dengan peraturan bupati/walikota dengan berpedoman pada ketentuan peraturan perundang-undangan.
 
+tahapan pelaksanaan kegiatan
 pasal 49 kepala desa mengoordinasikan tahapan pelaksanaan kegiatan yang sekurang-kurangnya meliputi:
 a. rapat kerja dengan pelaksana kegiatan;
 b. pemeriksaan pelaksanaan kegiatan infrastruktur desa;
@@ -770,6 +801,7 @@ e. penyusunan laporan hasil pelaksanaan kegiatan;
 f. musyawarah pelaksanaan kegiatan desa dalam rangka pertanggungjawaban hasil pelaksanaan kegiatan; dan
 g. pelestarian dan pemanfaatan hasil kegiatan.
 
+rapat kerja pelaksana kegiatan
 pasal 50
 (1) kepala desa menyelenggarakan rapat kerja pelaksana kegiatan dalam rangka pembahasan tentang perkembangan pelaksanaan kegiatan.
 (2) pembahasan sebagaimana dimaksud pada ayat (1) berdasarkan laporan pelaksana kegiatan kepada kepala desa.
@@ -784,6 +816,8 @@ c. masalah, kendala dan hambatan;
 d. target kegiatan pada tahapan selanjutnya; dan
 e. perubahan kegiatan.
 (2) kepala desa dapat menambahkan agenda pembahasan rapat kegiatan sebagaimana dimaksud pada ayat (1), sesuai dengan kondisi perkembangan pelaksanaan kegiatan yang ada di desa.
+
+pemeriksaan kegiatan infrastruktur desa
 
 pasal 52
 
@@ -807,6 +841,8 @@ c. tahap ketiga: penilaian dan pemeriksaan terhadap 100% (seratus per seratus) d
 (3) pemeriksa melaporkan kepada kepala desa perihal hasil pemeriksaan pada setiap tahapan sebagaimana dimaksud pada ayat (2).
 
 (4) laporan hasil pemeriksaan sebagaimana dimaksud pada ayat (3) menjadi bahan pengendalian pelaksanaan kegiatan oleh kepala desa.
+
+perubahan pelaksanaan kegiatan
 
 pasal 54
 
@@ -860,6 +896,8 @@ d. melibatkan masyarakat desa dalam menyelesaikan masalah; dan
 e. mengadministrasikan bukti pengaduan dan penyelesaian masalah.
 (4) penyelesaian masalah sebagaimana dimaksud pada ayat (1) dilakukan secara mandiri oleh desa berdasarkan kearifan lokal dan pengarusutamaan perdamaian melalui musyawarah desa.
 (5) dalam hal musyawarah desa sebagaimana dimaksud pada ayat (4) menyepakati masalah dinyatakan selesai, hasil kesepakatan dituangkan dalam berita acara musyawarah desa.
+
+penyusunan laporan pelaksanaan kegiatan
 
 pasal 58
 

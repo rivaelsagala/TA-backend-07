@@ -1,5 +1,7 @@
 [dokumen: Peraturan Desa Biru No. 07 Tahun 2015 - Kesehatan Ibu, Bayi Baru Lahir, Bayi Dan Anak Balita (Kibbla)] [desa: biru] [kabupaten: bandung] [nomor: 07/2015]
 
+peraturan desa biru
+
 tentang kesehatan ibu, bayi baru lahir, bayi dan anak balita (kibbla)
 
 dengan rahmat tuhan yang maha esa
@@ -32,6 +34,8 @@ d. bahwa belum efektifnya program jampersal dimana ibu yang akan
 
 bersalin masih tetap harus membayar biaya persalinan dengan biaya
 
+yang mahal
+
 e. bahwa sehubungan dengan maksud pada huruf a, b, c, dan dkonsideran
 
 menimbang ini, perlu adanya peraturan desa tentang kesehatan ibu,
@@ -40,11 +44,13 @@ bayi baru lahir, bayi dan anak balita (kibbla);
 
 mengingat :
 
-1. undang-undang nomor 10 tahun 2004 tentang pembentukan peraturan perundang-undangan (lembaran negara republik indonesia tahun 2004 nomor 53, tambahan lembaran negara republik indonesia nomor 4389);
+1. undang-undang nomor 10 tahun 2004 tentang pembentukan peraturan perundang-undangan (lembaran negara republik indonesia tahun
+2004 nomor 53, tambahan lembaran negara republik indonesia nomor 4389);
 
 2. undang-undang nomor 32 tahun 2004 tentang pemerintahan daerah (lembaran negara republik indonesia tahun 2004 nomor 125,
 
-tambahan lembaran negara republik indonesia nomor 4437) sebagaimana telah diubah dengan undang-undang nomor 12 tahun 2008 (lembaran negara republik indonesia tahun 2008 nomor 39,
+tambahan lembaran negara republik indonesia nomor 4437) sebagaimana telah diubah dengan undang-undang nomor 12 tahun
+2008 (lembaran negara republik indonesia tahun 2008 nomor 39,
 tambahan lembaran negara republik indonesia nomor 4825);
 
 3. undang-undang nomor 36 tahun 2009 tentang kesehatan (lembaran negara republik indonesia tahun 2009 nomor 144, tambahan lembaran negara republik indonesia nomor 5063);
@@ -53,18 +59,22 @@ tambahan lembaran negara republik indonesia nomor 4825);
 
 5. peraturan menteri dalam negeri nomor 29 tahun 2006 tentang pedoman pembentukan dan mekanisme penyusunan peraturan desa;
 
-6. undang - undang nomor 7 tahun 1984 tentang pengesahan konvensi penghapusan mengenai penghapusan segala bentuk diskriminasi terhadap perempuan (lembaran negara republik indonesia tahun 1984 nomor 29, tambahan lembaran negara republik indonesia nomor 3277)
+6. undang - undang nomor 7 tahun 1984 tentang pengesahan konvensi penghapusan mengenai penghapusan segala bentuk diskriminasi terhadap perempuan (lembaran negara republik indonesia tahun
+1984 nomor 29, tambahan lembaran negara republik indonesia nomor 3277)
 7. undang-undang nomor 39 tahun 1999 tentang hak asasi manusia (lembaran negara republik indonesia tahun 1999 nomor 165,
 tambahan lembaran negara republik indonesia nomor 3886).
 8. undang-undang nomor 23 tahun 2002 tentang perlindungan anak (lembaran negara republik indonesia tahun 2002 nomor 109,
 tambahan lembaran negara republik indonesia nomor 4235).
-9. undang-undang nomor 23 tahun 2004 tentang penghapusan kekerasan dalam rumah tangga (lembaran negara republik indonesia tahun 2004 nomor 95, tambahan lembaran negara republik indonesia nomor 4419).
+9. undang-undang nomor 23 tahun 2004 tentang penghapusan kekerasan dalam rumah tangga (lembaran negara republik indonesia tahun
+2004 nomor 95, tambahan lembaran negara republik indonesia nomor 4419).
 10. instruksi presiden republik indonesia nomor 9 tahun 2000 tentang pengarusutamaan gender dalam semua proses perencanaan, pelaksanaan,
 monitoring dan evaluasi pembangunan.
 11. peraturan daerah kabupaten bandung nomor 8 tahun 2009 tentang kesehatan ibu, bayi baru lahir dan anak balita (kibbla) (lembaran daerah kabupaten bandung tahun 2009 nomor 8);
 
 12. peraturan bupati kabupaten bandung nomor 10 tahun 2010 tentang petunjuk pelaksanaan dan petunjuk teknis peraturan daerah kabupaten bandung nomor 8 tahun 2009 tentang kesehatan ibu, bayi baru lahir,
 bayi dan anak balita (kibbla) di kabupaten bandung
+
+dengan persetujuan bersama
 
 badan permusyawaratan desa biru dan kepala desa biru
 
@@ -107,6 +117,8 @@ dari badan permusyawaratan desa biru.
 4. keputusan kepala desa adalah keputusan yang dibuat oleh kepala desa
 
 sebagai tindak lanjut peraturan desa atau ketentuan lain yang bersifat
+
+mengatur atau menetapkan
 
 5. kepala desa adalah pejabat yang memimpin penyelenggaraan
 
@@ -152,7 +164,11 @@ peraturan desa ini disebut tenaga kesehatan.
 
 penelaahan kasus kesakitan dan kematian ibu dan perinatal serta
 
+penatalaksanaannya secara menyeluruh
+
 12. masyarakat adalah masyarakat desa biru kecamatan majalaya
+
+kabupaten bandung
 
 13. ibu adalah wanita usia subur yang masih dapat hamil , sedang hamil,
 
@@ -377,6 +393,8 @@ b) mempromosikan dan mengelola tabulin)
 
 bab iv
 
+masa bakti kepengurusan
+
 pasal 13
 
 1. masa bakti kepengurusan tim kibbla adalah 3 (tiga) tahun.
@@ -549,6 +567,8 @@ sewaktu-waktu dibutuhkan transportasinya.
 
 bab ix
 
+pengawasan dan pelaporan
+
 pasal 20
 
 1. penanggungjawab pengawasan pengelolaan kegiatan dan keuangan adalah kepala desa,
@@ -572,7 +592,5 @@ hal-hal yang belum diatur dalam peraturan desa ini akan diatur lebih lanjut deng
 bab xi ketentuan penutup
 pasal 22
 
-peraturan desa ini mulai berlaku pada tanggal diundangkan.agar setiap orang dapat mengetahuinya, memerintahkan pengundangan peraturan desa ini dengan penempatannya dalam berita daerah kabupaten bandung
-
-ttd aan kurniawan lembaran desa 07 tahun 2015 nomor 5
+peraturan desa ini mulai berlaku pada tanggal diundangkan.agar setiap orang dapat mengetahuinya
 
