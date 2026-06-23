@@ -945,7 +945,7 @@ if __name__ == "__main__":
         shutil.move(str(output_path), str(backup_path))
         print(f"✅ Data sebelumnya aman! Telah dibackup ke:\n   {backup_path}")
 
-    CHUNKS_PER_DOC = 1  # Ubah ke None untuk full dataset
+    CHUNKS_PER_DOC = None   # Ubah ke None untuk full dataset
     print(f"\nMode: {'TEST' if CHUNKS_PER_DOC else 'FULL'}")
     
     # 1. Generate Dataset
