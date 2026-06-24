@@ -907,7 +907,7 @@ if __name__ == "__main__":
     # --- KONFIGURASI FILE ---
     # Set ke nama file untuk proses 1 file saja, atau None untuk semua file di folder
     # Contoh: "PERATURAN_DESA_BIRU_NOMOR_07_TAHUN_2015_chunks.json"
-    SINGLE_FILE = "PERATURAN_DESA_MAJASETRA_NOMOR_1_TAHUN_2018_chunks.json"  # Ubah ke nama file untuk proses satu file saja
+    SINGLE_FILE = "PERATURAN_DESA_MEKARRAHAYU_NOMOR_04_TAHUN_20161_chunks.json"  # Ubah ke nama file untuk proses satu file saja
 
     if SINGLE_FILE:
         single_path = PROCESSED_DIR / SINGLE_FILE
@@ -931,14 +931,14 @@ if __name__ == "__main__":
     print(f"Response: {test_resp}")
     
     # Setup Output
-    OUTPUT_FILENAME = "raft_perdes_dataset.jsonl"
+    OUTPUT_FILENAME = "raft_perdes_dataset_5.jsonl"
     output_path = DATASET_DIR / OUTPUT_FILENAME
 
     # --- SISTEM BACKUP OTOMATIS ---
     if output_path.exists():
         # Buat timestamp berdasarkan waktu saat ini
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_filename = f"raft_perdes_dataset_backup_{timestamp}.jsonl"
+        backup_filename = f"raft_perdes_dataset_backup_5{timestamp}.jsonl"
         backup_path = DATASET_DIR / backup_filename
         
         # Pindahkan file lama menjadi file backup

@@ -4,7 +4,7 @@ from app.usecases.chat_use_case import (
     create_new_session,
     get_user_sessions,
     get_session_history,
-update_session_details,
+    update_session_details,
     delete_session
 )
 

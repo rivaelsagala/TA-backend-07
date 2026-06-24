@@ -1,4 +1,4 @@
-[dokumen: Peraturan Desa Cigentur No. 8 Tahun 2018 - Badan Permusyawaratan Desa (Bpd) Di Desa Cigentur Kecamatan Paseh Kabupaten Bandung] [desa: cigentur] [kabupaten: bandung] [nomor: 8/2018]
+[dokumen: Peraturan Desa Cigentur Kecamatan Paseh Kabupaten Bandung No. 8 Tahun 2018 - Badan Permusyawaratan Desa (Bpd) Di Desa Cigentur Kecamatan Paseh Kabupaten Bandung] [desa: cigentur kecamatan paseh kabupaten bandung] [kabupaten: bandung] [nomor: 8/2018]
 
 peraturan desa cigentur kecamatan paseh kabupaten bandung nomor 8 tahun 2018
 
@@ -244,14 +244,12 @@ f. melanggar larangan sebagaimana dimaksud dalam pasal 10 ayat (2).
 
 bagian kedua pengganti antar waktu
 pasal 24
-(1) penggantian anggota antar waktu bpd dilaksanakan apabila ada anggota bpd yang berhenti atau diberhentikan dari keanggotaan bpd sebagaimana dimaksud pada pasal 23.
-(2) calon pengganti anggota antar waktu bpd sebagaimana dimaksud pada ayat (1), calon yang diusulkan berdasarkan hasil musyawarah awal pembentukan bpd tingkat desa yang tidak ditetapkan sebagai anggota bpd, dengan memperhatikan dari dusun atau rw-rw yang diwakili oleh anggota bpd yang bersangkutan.
+(1) penggantian anggota antar waktu bpd dilaksanakan apabila ada anggota bpd yang berhenti atau diberhentikan dari keanggotaan bpd sebagaimana dimaksud pada pasal 23. (2) calon pengganti anggota antar waktu bpd sebagaimana dimaksud pada ayat (1), calon yang diusulkan berdasarkan hasil musyawarah awal pembentukan bpd tingkat desa yang tidak ditetapkan sebagai anggota bpd, dengan memperhatikan dari dusun atau rw-rw yang diwakili oleh anggota bpd yang bersangkutan.
 (3) ketua atau pimpinan bpd mengusulkan penggantian anggota antar waktu bpd kepada bupati melalui camat.
 
 bagian kedua pengganti antar waktu
 pasal 24
-(1) penggantian anggota antar waktu bpd dilaksanakan apabila ada anggota bpd yang berhenti atau diberhentikan dari keanggotaan bpd sebagaimana dimaksud pada pasal 23.
-(2) calon pengganti anggota antar waktu bpd sebagaimana dimaksud pada ayat (1), calon yang diusulkan berdasarkan hasil musyawarah awal pembentukan bpd tingkat desa yang tidak ditetapkan sebagai anggota bpd, dengan memperhatikan dari dusun atau rw-rw yang diwakili oleh anggota bpd yang bersangkutan.
+(1) penggantian anggota antar waktu bpd dilaksanakan apabila ada anggota bpd yang berhenti atau diberhentikan dari keanggotaan bpd sebagaimana dimaksud pada pasal 23. (2) calon pengganti anggota antar waktu bpd sebagaimana dimaksud pada ayat (1), calon yang diusulkan berdasarkan hasil musyawarah awal pembentukan bpd tingkat desa yang tidak ditetapkan sebagai anggota bpd, dengan memperhatikan dari dusun atau rw-rw yang diwakili oleh anggota bpd yang bersangkutan.
 (3) ketua atau pimpinan bpd mengusulkan penggantian anggota antar waktu bpd kepada bupati melalui camat.
 
 (4) pengusulan penggantian anggota antar waktu bpd sebagaimana dimaksud pada ayat (3),
@@ -271,5 +269,5 @@ b. bantuan pihak ketiga yang tidak mengikat.
 bab viii ketentuan penutup
 pasal 26 hal-hal yang belum cukup diatur dalam peraturan desa ini yang berkaitan dengan bpd akan diatur lebih lanjut dalam tata tertib bpd.
 pasal 27 peraturan desa ini mulai berlaku pada tanggal diundangkan.
-agar setiap orang mengetahuinya memerintahkan pengundangan peraturan desa ini dengan penempatannya dalam berita daerah
+agar setiap orang mengetahuinya memerintahkan pengundangan peraturan desa ini dengan penempatannya dalam berita daerah kabupaten bandung.
 
