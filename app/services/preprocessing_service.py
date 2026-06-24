@@ -186,6 +186,95 @@ def clean_legal_text(text: str) -> str:
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text
 
+# def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
+#     village_name = "unknown"
+#     regency_name = "unknown"
+#     perdes_number = "unknown"
+#     perdes_year = "unknown"
+#     perdes_title = "unknown"
+    
+#     try:
+#         spaced_keywords = [
+#             'TENTANG', 'MENIMBANG', 'MENGINGAT', 'MEMUTUSKAN', 'MENETAPKAN',
+#             'MEMPERHATIKAN', 'DENGAN', 'RAHMAT', 'TUHAN'
+#         ]
+#         normalized_text = full_text
+#         for kw in spaced_keywords:
+#             spaced_pattern = r'\s+'.join(list(kw))
+#             normalized_text = re.sub(spaced_pattern, kw, normalized_text, flags=re.IGNORECASE)
+        
+#         lines = [line.strip() for line in normalized_text.split('\n') if line.strip()]
+        
+#         header_end = len(lines)
+#         for i, line in enumerate(lines[:30]):
+#             upper = line.upper().strip()
+#             if upper.startswith('MENIMBANG') or upper.startswith('MENGINGAT'):
+#                 header_end = i
+#                 break
+        
+#         for i, line in enumerate(lines[:min(header_end + 5, 25)]):
+#             upper_line = line.upper()
+#             if "KEPALA DESA" in upper_line:
+#                 parts = upper_line.split("KEPALA DESA")
+#                 if len(parts) > 1 and parts[1].strip():
+#                     village_name = parts[1].strip().lower().rstrip('.,:;').strip()
+#             elif "PEMERINTAH DESA" in upper_line and village_name == "unknown":
+#                 parts = upper_line.split("PEMERINTAH DESA")
+#                 if len(parts) > 1 and parts[1].strip():
+#                     village_name = parts[1].strip().lower().rstrip('.,:;').strip()
+            
+#             nomor_match = re.search(r'NOMOR\s*[:\-]?\s*(\d+)\s*TAHUN\s+(\d{4})', upper_line)
+#             if nomor_match and perdes_number == "unknown":
+#                 perdes_number = nomor_match.group(1)
+#                 perdes_year = nomor_match.group(2)
+            
+#             if upper_line.strip() == "TENTANG" and i + 1 < len(lines):
+#                 title_lines = []
+#                 for j in range(i + 1, min(i + 5, len(lines))):
+#                     next_upper = lines[j].upper().strip()
+#                     if next_upper in ["DENGAN RAHMAT TUHAN YANG MAHA ESA", "KEPALA DESA", ""]:
+#                         break
+#                     title_lines.append(lines[j].strip())
+#                 if title_lines:
+#                     perdes_title = " ".join(title_lines).lower()
+        
+#         regency_candidates = re.findall(r'kabupaten\s+([a-zA-Z]+)', full_text, re.IGNORECASE)
+#         if regency_candidates:
+#             stop_words = {'yang', 'dan', 'atau', 'dari', 'di', 'ke', 'pada', 
+#                           'dalam', 'dengan', 'untuk', 'oleh', 'ini', 'itu',
+#                           'nomor', 'tahun', 'republik', 'indonesia', 'negara',
+#                           'daerah', 'bupati', 'peraturan', 'pemerintah'}
+#             filtered = [w.lower() for w in regency_candidates if w.lower() not in stop_words and len(w) > 2]
+#             if filtered:
+#                 from collections import Counter
+#                 regency_name = Counter(filtered).most_common(1)[0][0]
+        
+#         if regency_name == "unknown":
+#             kota_candidates = re.findall(r'kota\s+([a-zA-Z]+)', full_text, re.IGNORECASE)
+#             if kota_candidates:
+#                 stop_words = {'yang', 'dan', 'atau', 'dari', 'di', 'ke', 'pada',
+#                               'dalam', 'dengan', 'untuk', 'oleh', 'ini', 'itu'}
+#                 filtered = [w.lower() for w in kota_candidates if w.lower() not in stop_words and len(w) > 2]
+#                 if filtered:
+#                     from collections import Counter
+#                     regency_name = "kota " + Counter(filtered).most_common(1)[0][0]
+        
+#     except Exception as e:
+#         logger.warning(f"Gagal mengekstrak metadata perdes: {e}")
+    
+#     document_id = f"perdes_{village_name}_{perdes_number}_{perdes_year}"
+#     document_title = f"Peraturan Desa {village_name.title()} No. {perdes_number} Tahun {perdes_year} - {perdes_title.title()}"
+    
+#     return {
+#         "village_name": village_name,
+#         "regency_name": regency_name,
+#         "perdes_number": perdes_number,
+#         "perdes_year": perdes_year,
+#         "perdes_title": perdes_title,
+#         "document_id": document_id,
+#         "document_title": document_title
+#     }
+    
 def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
     village_name = "unknown"
     regency_name = "unknown"
@@ -212,32 +301,57 @@ def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
                 header_end = i
                 break
         
-        for i, line in enumerate(lines[:min(header_end + 5, 25)]):
-            upper_line = line.upper()
-            if "KEPALA DESA" in upper_line:
-                parts = upper_line.split("KEPALA DESA")
-                if len(parts) > 1 and parts[1].strip():
-                    village_name = parts[1].strip().lower().rstrip('.,:;').strip()
-            elif "PEMERINTAH DESA" in upper_line and village_name == "unknown":
-                parts = upper_line.split("PEMERINTAH DESA")
-                if len(parts) > 1 and parts[1].strip():
-                    village_name = parts[1].strip().lower().rstrip('.,:;').strip()
-            
-            nomor_match = re.search(r'NOMOR\s*[:\-]?\s*(\d+)\s*TAHUN\s+(\d{4})', upper_line)
-            if nomor_match and perdes_number == "unknown":
-                perdes_number = nomor_match.group(1)
-                perdes_year = nomor_match.group(2)
-            
-            if upper_line.strip() == "TENTANG" and i + 1 < len(lines):
-                title_lines = []
-                for j in range(i + 1, min(i + 5, len(lines))):
-                    next_upper = lines[j].upper().strip()
-                    if next_upper in ["DENGAN RAHMAT TUHAN YANG MAHA ESA", "KEPALA DESA", ""]:
-                        break
-                    title_lines.append(lines[j].strip())
-                if title_lines:
-                    perdes_title = " ".join(title_lines).lower()
+        header_lines = lines[:min(header_end + 5, 25)]
         
+        # Gabungkan baris header menjadi satu teks blok.
+        header_block = " ".join(header_lines).upper()
+        
+        # 1. Ekstrak nama desa (Lebih tangguh terhadap akhiran NOMOR, NOMOR., atau NO)
+        desa_match = re.search(r'PERATURAN\s+DESA\s+(.*?)\s+(?:NOMOR|NO\b)', header_block)
+        if desa_match:
+            potensi_desa = desa_match.group(1).strip().lower()
+            # Hapus karakter baca/titik/koma jika OCR tidak sengaja menyatukannya
+            potensi_desa = re.sub(r'[\.\:\,\-\;]$', '', potensi_desa).strip()
+            if len(potensi_desa) < 50:
+                village_name = potensi_desa
+                
+        # 2. Fallback "KEPALA DESA" / "PEMERINTAH DESA"
+        if village_name == "unknown":
+            fallback_match = re.search(r'(?:KEPALA|PEMERINTAH)\s+DESA\s+(.*?)(?:\s+KECAMATAN|\s+KABUPATEN|\s+PERATURAN|\s+NOMOR|\s+NO\b|$)', header_block)
+            if fallback_match:
+                potensi_desa = fallback_match.group(1).strip().lower().rstrip('.,:;')
+                if potensi_desa and len(potensi_desa) < 50:
+                    village_name = potensi_desa
+
+        # 3. [PERBAIKAN UTAMA] Ekstrak Nomor dan Tahun 
+        # Menoleransi awalan "NOMOR" atau "NO", serta tanda baca titik, koma, spasi berlebih
+        nomor_match = re.search(r'(?:NOMOR|NO)\s*[\.\:\-,]?\s*(\d+)\s*TAHUN\s*[\.\:\-,]?\s*(\d{4})', header_block)
+        if nomor_match:
+            perdes_number = nomor_match.group(1)
+            perdes_year = nomor_match.group(2)
+
+        # 4. [PERBAIKAN FITUR] Ekstrak Judul menggunakan RegEx pada header_block
+        # Mengurangi resiko gagal karena teks terpotong ke baris bawah akibat layout PDF
+        tentang_match = re.search(r'TENTANG\s+(.*?)(?:\s+DENGAN\s+RAHMAT|\s+KEPALA\s+DESA|\s+MENIMBANG)', header_block)
+        if tentang_match:
+            potensi_judul = tentang_match.group(1).strip().lower()
+            if len(potensi_judul) > 5:
+                perdes_title = potensi_judul
+        else:
+            # Fallback (Cara lama) jika regex gagal
+            for i, line in enumerate(header_lines):
+                upper_line = line.upper()
+                if upper_line.strip() == "TENTANG" and i + 1 < len(lines):
+                    title_lines = []
+                    for j in range(i + 1, min(i + 5, len(lines))):
+                        next_upper = lines[j].upper().strip()
+                        if next_upper in ["DENGAN RAHMAT TUHAN YANG MAHA ESA", "KEPALA DESA", ""]:
+                            break
+                        title_lines.append(lines[j].strip())
+                    if title_lines:
+                        perdes_title = " ".join(title_lines).lower()
+                        
+        # 5. Ekstrak Kabupaten / Kota (Sama dengan aslinya)
         regency_candidates = re.findall(r'kabupaten\s+([a-zA-Z]+)', full_text, re.IGNORECASE)
         if regency_candidates:
             stop_words = {'yang', 'dan', 'atau', 'dari', 'di', 'ke', 'pada', 
@@ -362,11 +476,20 @@ def _parse_perdes_sections(text: str) -> list:
     current_bagian_title = ""
     
     pasal_positions = []
-    for i, line in enumerate(lines):
-        # Deteksi tulisan pasal yang memiliki teks di sebelahnya (inline headers)
-        if re.match(r'^\s*pasal\s+\d+(?:[\.\:\s]+.*)?$', line.strip(), re.IGNORECASE):
-            pasal_positions.append(i)
+    is_content_started = False
     
+    for i, line in enumerate(lines):
+        lower_line = line.strip().lower()
+        
+        if not is_content_started:
+            if re.match(r'^(menetapkan|memutuskan|bab\s+i|pasal\s+1)\b', lower_line):
+                is_content_started = True
+                
+        if is_content_started:
+            if re.match(r'^\s*pasal\s+\d+(?:[\.\:\s]+.*)?$', lower_line):
+                if not re.search(r'\b(sampai\s+dengan|sebagaimana|tentang)\b', lower_line):
+                    pasal_positions.append(i)
+
     if not pasal_positions:
         return results
     
@@ -627,8 +750,12 @@ def chunk_documents(documents: list):
             chunk_meta = metadata.copy()
             chunk_meta["bab"] = section.get("bab", "")
             chunk_meta["bab_title"] = section.get("bab_title", "")
-            chunk_meta["bagian"] = section.get("bagian", "")
-            chunk_meta["bagian_title"] = section.get("bagian_title", "")
+            
+            if section.get("bagian"):
+                chunk_meta["bagian"] = section.get("bagian")
+            if section.get("bagian_title"):
+                chunk_meta["bagian_title"] = section.get("bagian_title")
+                
             chunk_meta["section"] = section["pasal"]
             chunk_meta["ayat"] = section.get("ayat", "")
             if section.get("butir_num"):
@@ -661,14 +788,18 @@ def save_results_to_folder(file_path: str, extracted_docs: list, chunks: list):
             "chunk_index": i + 1,
             "bab": meta.get("bab", ""),
             "bab_title": meta.get("bab_title", ""),
-            "bagian": meta.get("bagian", ""),
-            "bagian_title": meta.get("bagian_title", ""),
             "pasal": meta.get("section", ""),
             "ayat": meta.get("ayat", ""),
             "metadata": meta,
             "character_count": len(chunk.page_content),
             "content": chunk.page_content
         }
+        
+        if meta.get("bagian"):
+            item["bagian"] = meta.get("bagian")
+        if meta.get("bagian_title"):
+            item["bagian_title"] = meta.get("bagian_title")
+            
         if meta.get("butir_number"):
             item["butir"] = meta["butir_number"]
         chunks_data.append(item)
