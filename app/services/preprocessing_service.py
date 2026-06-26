@@ -91,13 +91,13 @@ def clean_legal_text(text: str) -> str:
 
     # Potong lampiran/tabel setelah kalimat penutup (dibuat lebih fleksibel)
     closing_match = re.search(
-        r'agar\s+setiap\s+orang\s+(?:dapat\s+)?mengetahui(?:nya)?',
+        r'agar\s+(?:setiap|semua)\s+orang\s+(?:dapat\s+)?mengetahui(?:nya)?',
         text,
         flags=re.IGNORECASE
     )
     if closing_match:
         end_search = re.search(
-            r'menempatkannya\s+dalam\s+lembaran\s+desa\.?',
+            r'(?:m|p)enempatkannya\s+dalam\s+lembaran\s+(?:desa|daerah|kabupaten|kota)[^;.]*[;.]?',
             text[closing_match.start():],
             flags=re.IGNORECASE
         )
@@ -105,7 +105,7 @@ def clean_legal_text(text: str) -> str:
             text = text[:closing_match.start() + end_search.end()]
         else:
             rest = text[closing_match.end():]
-            period = re.search(r'\.', rest)
+            period = re.search(r'[;.]', rest)
             if period:
                 text = text[:closing_match.end() + period.end()]
             else:

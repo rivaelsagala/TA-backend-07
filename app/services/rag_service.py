@@ -11,9 +11,7 @@ from app.services.reranker_service import rerank_documents
 
 load_dotenv()
 
-# ==========================================
 # 1. INISIALISASI DATABASE & EMBEDDINGS
-# ==========================================
 supabase_url = os.getenv("SUPABASE_URL", "")
 supabase_key = os.getenv("SUPABASE_KEY", "")
 
@@ -25,9 +23,7 @@ embeddings = OpenAIEmbeddings(
     base_url=os.getenv("OPENAI_BASE_URL", "")
 )
 
-# ==========================================
 # 2. DAFTAR MODEL YANG TERSEDIA
-# ==========================================
 AVAILABLE_MODELS = {
     1: {"name": "meta-llama/Llama-3.1-8B-Instruct", "type": "original"},
     2: {"name": "Qwen/Qwen2.5-7B-Instruct", "type": "original"},
@@ -38,22 +34,16 @@ AVAILABLE_MODELS = {
     8: {"name": "model_merged_raft_perdes", "type": "raft"}
 }
 
-# ==========================================
 # 3. HUGGINGFACE SERVICE (LLM Multi-Model Support)
-# ==========================================
 class HuggingFaceService:
     """Service untuk berinteraksi dengan HuggingFace Router API dan Fine-tuned Model"""
     
     def __init__(self):
-        # HuggingFace Router API (Model belum fine-tuned)
-        # Menggunakan HF_BASE_URL sesuai dengan .env Anda
         self.api_url = os.getenv("HF_BASE_URL", "")
         self.token = os.getenv("HF_TOKEN", "")
         
-        # Fine-tuned Model API (B200 Server)
         self.finetuned_api_url = os.getenv("FINETUNED_API_URL", "")
         
-        # Common settings
         self.temperature = 0.0
         self.max_tokens = 2000
         
@@ -73,43 +63,31 @@ class HuggingFaceService:
             result = response.json()
             
             if result.get("status") == "success":
-                logger.info(f"✅ Fine-tuned model loaded: {result.get('message')}")
+                logger.info(f"Fine-tuned model loaded: {result.get('message')}")
                 return True
             else:
-                logger.warning(f"⚠️ Model load response: {result}")
+                logger.warning(f"Model load response: {result}")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Error loading fine-tuned model: {str(e)}")
+            logger.error(f"Error loading fine-tuned model: {str(e)}")
             return False
     
     def query(self, messages: List[Dict[str, str]], model_id: int = 1, **kwargs) -> Optional[Dict[str, Any]]:
         """Kirim query ke LLM API berdasarkan model_id (lihat AVAILABLE_MODELS)."""
         try:
-            # Dapatkan info model, default ke model id 1 (Llama 3.1) jika id tidak ditemukan
             model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS[1])
             model_type = model_info.get("type", "original")
             
             if model_type == "raft":
-                # ============================================
-                # RAFT MODEL API (B200 Server — /chat-rag)
-                # ============================================
-                # RAFT (Retrieval Augmented Fine-Tuning) menerima list dokumen mentah
-                # dan melakukan reasoning internal untuk memilih dokumen relevan.
-                # Endpoint: POST /api/chat-rag
-                # Payload:  {"pertanyaan": "...", "dokumen": ["chunk1", "chunk2", ...]}
-                # Response: {"jawaban": "...", "status": "success", ...}
                 api_url = f"{self.finetuned_api_url}/chat-rag"
                 logger.debug(f"RAFT model: {model_info['name']}")
                 
-                # Extract user question dari messages array
                 user_message = ""
                 for msg in messages:
                     if msg.get("role") == "user":
                         user_message = msg.get("content", "")
                 
-                # Ambil raw document chunks dari kwargs
-                # Ini adalah list string individual dari hasil retrieval (belum di-join)
                 raw_doc_chunks = kwargs.get("raw_doc_chunks", [])
                 
                 if not raw_doc_chunks:
@@ -134,8 +112,6 @@ class HuggingFaceService:
                 result = response.json()
                 
                 # Standardisasi format response agar konsisten dengan model lain
-                # RAFT returns "jawaban" instead of "answer"
-                # PENTING: Preserve field analisis (thought_process) agar bisa dikembalikan ke user
                 standardized_result = {
                     "choices": [
                         {
@@ -160,10 +136,6 @@ class HuggingFaceService:
 
 
             elif model_type == "openai":
-                # ============================================
-                # MAIA ROUTER (OpenAI Compatible API)
-                # ============================================
-                # Ambil base_url dari env, hapus '/' di akhir jika ada, dan tambahkan /chat/completions
                 base_url = os.getenv("OPENAI_BASE_URL", "https://api.maiarouter.ai/v1").rstrip('/')
                 api_url = f"{base_url}/chat/completions"
                 api_key = os.getenv("OPENAI_API_KEY", "")
@@ -196,9 +168,6 @@ class HuggingFaceService:
                 return result
                 
             else:
-                # ============================================
-                # HUGGINGFACE ROUTER API (Original Models)
-                # ============================================
                 api_url = self.api_url
                 model_name = model_info["name"]
                 logger.debug(f"Using ORIGINAL model: {model_name}")

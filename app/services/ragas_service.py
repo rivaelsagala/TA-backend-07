@@ -3,9 +3,10 @@ Service untuk evaluasi RAG menggunakan framework RAGAS
 """
 import os
 import warnings
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from loguru import logger
 from datasets import Dataset
+import numpy as np
 from ragas import evaluate
 from ragas.metrics import (
     faithfulness,
@@ -29,6 +30,118 @@ load_dotenv()
 
 # Supaya warning tidak mengganggu
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+
+class SemanticAnswerSimilarity:
+    """
+    Menghitung Semantic Answer Similarity (SAS) antara `answer` dan `ground_truth`
+    menggunakan Embedding Model + Cosine Similarity.
+
+    Fokus pada kesamaan MAKNA, bukan kesamaan karakter/tanda baca.
+    Hasil berupa float dalam rentang 0.0 – 1.0.
+
+    Atribut:
+        model_name (str): Nama embedding model yang dikonfigurasi via env
+                          EMBEDDING_MODEL (default: openai/text-embedding-3-large).
+
+    Metode:
+        compute_sas(answer, ground_truth)   -> float (single pair)
+        compute_sas_batch(pairs)            -> List[float] (batch pairs)
+    """
+
+    def __init__(self, model_name: Optional[str] = None):
+        self.api_key  = os.getenv("OPENAI_API_KEY", "")
+        self.base_url = os.getenv("OPENAI_BASE_URL", "")
+        self.model_name = (
+            model_name
+            or os.getenv("EMBEDDING_MODEL", "openai/text-embedding-3-large")
+        )
+
+        # Reuse LangChain OpenAIEmbeddings yang sudah dipakai di sistem
+        self._embedder = OpenAIEmbeddings(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            model=self.model_name,
+        )
+        logger.info(
+            f"SemanticAnswerSimilarity initialized — model: {self.model_name}"
+        )
+
+    # ------------------------------------------------------------------
+    # Internal helper
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
+        """Hitung cosine similarity antara dua vektor, kembalikan float 0–1."""
+        a = np.array(vec_a, dtype=np.float32)
+        b = np.array(vec_b, dtype=np.float32)
+        norm_a = np.linalg.norm(a)
+        norm_b = np.linalg.norm(b)
+        if norm_a == 0 or norm_b == 0:
+            return 0.0
+        # cosine similarity bisa -1..1; clip ke 0..1 agar konsisten
+        raw = float(np.dot(a, b) / (norm_a * norm_b))
+        return float(np.clip(raw, 0.0, 1.0))
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+    def compute_sas(
+        self,
+        answer: str,
+        ground_truth: str,
+    ) -> float:
+        """
+        Hitung SAS untuk satu pasang (answer, ground_truth).
+
+        Returns:
+            float: Similarity score 0.0 – 1.0
+        """
+        try:
+            vecs = self._embedder.embed_documents([answer, ground_truth])
+            score = self._cosine_similarity(vecs[0], vecs[1])
+            logger.debug(f"SAS score: {score:.4f}")
+            return round(score, 4)
+        except Exception as e:
+            logger.error(f"Error computing SAS: {e}")
+            return 0.0
+
+    def compute_sas_batch(
+        self,
+        pairs: List[Dict[str, str]],
+    ) -> List[float]:
+        """
+        Hitung SAS untuk banyak pasang sekaligus (batch) secara efisien.
+        Menggunakan satu API call untuk semua teks.
+
+        Args:
+            pairs: List of dict dengan key 'answer' dan 'ground_truth'.
+                   Contoh: [{"answer": "...", "ground_truth": "..."}, ...]
+
+        Returns:
+            List[float]: SAS score 0.0 – 1.0 untuk setiap pasang,
+                         dengan urutan yang sama seperti input.
+        """
+        if not pairs:
+            return []
+        try:
+            texts = []
+            for p in pairs:
+                texts.append(p["answer"])
+                texts.append(p["ground_truth"])
+
+            all_vecs = self._embedder.embed_documents(texts)
+
+            scores = []
+            for i in range(0, len(all_vecs), 2):
+                score = self._cosine_similarity(all_vecs[i], all_vecs[i + 1])
+                scores.append(round(score, 4))
+
+            logger.debug(f"SAS batch ({len(pairs)} pairs): {scores}")
+            return scores
+        except Exception as e:
+            logger.error(f"Error computing SAS batch: {e}")
+            return [0.0] * len(pairs)
 
 class RagasEvaluationService:
     """
@@ -162,7 +275,7 @@ class RagasEvaluationService:
             df_results = evaluation_result.to_pandas()
             result_dict = df_results.iloc[0].to_dict()
             
-            # Format hasil
+            # Format hasil RAGAS
             formatted_result = {
                 "faithfulness": float(result_dict.get("faithfulness", 0)),
                 "answer_relevancy": float(result_dict.get("answer_relevancy", 0)),
@@ -171,6 +284,12 @@ class RagasEvaluationService:
                 # "context_entity_recall": float(result_dict.get("context_entity_recall", 0)),
                 "noise_sensitivity": float(result_dict.get("noise_sensitivity", 0)),
             }
+
+            # Hitung Semantic Answer Similarity (SAS) — kesamaan makna answer vs ground_truth
+            # SAS hanya bermakna jika ground_truth adalah jawaban pakar (bukan fallback LLM)
+            sas_score = sas_service.compute_sas(answer, ground_truth)
+            formatted_result["semantic_similarity"] = sas_score
+            logger.debug(f"SAS (answer vs ground_truth): {sas_score}")
             
             # Rata-rata dari seluruh metrik
             # formatted_result["average_score"] = round(
@@ -190,7 +309,7 @@ class RagasEvaluationService:
                 "context_recall": 0,
                 # "context_entity_recall": 0,
                 "noise_sensitivity": 0,
-                # "average_score": 0
+                "semantic_similarity": 0,
             }
     
     def format_contexts_from_sources(self, sources: List[Dict[str, Any]]) -> List[str]:
@@ -212,5 +331,8 @@ class RagasEvaluationService:
         
         return contexts
 
-# Singleton instance
+# Singleton instances
+# sas_service dideklarasikan LEBIH DULU karena ragas_service.evaluate_single_response()
+# memanggilnya pada saat runtime (bukan saat class definition).
+sas_service = SemanticAnswerSimilarity()
 ragas_service = RagasEvaluationService()

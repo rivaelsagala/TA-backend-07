@@ -102,7 +102,7 @@ def get_session_history(session_id: int, limit: int = None):
                     # agar hasilnya tetap kronologis (pesan lama → baru)
                     cur.execute("""
                         SELECT * FROM (
-                            SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, similarity_score
+                            SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, semantic_similarity
                             FROM chat_history 
                             WHERE session_id = %s 
                             ORDER BY created_at DESC
@@ -113,7 +113,7 @@ def get_session_history(session_id: int, limit: int = None):
                 else:
                     # Ambil SEMUA history (untuk ditampilkan di frontend)
                     cur.execute("""
-                        SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, similarity_score
+                        SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, semantic_similarity
                         FROM chat_history 
                         WHERE session_id = %s 
                         ORDER BY created_at ASC
@@ -176,7 +176,6 @@ def save_chat_message(
     llm_response: str, 
     metadata: dict, 
     evaluation: dict = None, 
-    similarity_score: float = None
 ):
     """Simpan pesan chat baru beserta metrik evaluasi RAGAS dan Similarity Score"""
     try:
@@ -191,18 +190,19 @@ def save_chat_message(
                 context_precision = evaluation.get("context_precision") if evaluation else None
                 context_recall = evaluation.get("context_recall") if evaluation else None
                 noise_sensitivity = evaluation.get("noise_sensitivity") if evaluation else None
+                semantic_similarity = evaluation.get("semantic_similarity") if evaluation else None
                 
                 cur.execute("""
                     INSERT INTO chat_history (
                         session_id, user_id, user_query, llm_response, metadata, created_at,
                         faithfulness, answer_relevance, context_precision, context_recall, 
-                        noise_sensitivity, similarity_score
+                        noise_sensitivity, semantic_similarity
                     )
                     VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s)
                 """, (
                     session_id, user_id, user_query, llm_response, metadata_json,
                     faithfulness, answer_relevance, context_precision, context_recall, 
-                    noise_sensitivity, similarity_score
+                    noise_sensitivity, semantic_similarity
                 ))
                 
                 # Update waktu session agar selalu muncul paling atas saat chat aktif
