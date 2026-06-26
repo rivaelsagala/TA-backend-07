@@ -27,7 +27,6 @@ bp.add_url_rule('/api/generate-embedding', 'generate_embedding', handle_generate
 # bp.add_url_rule('/api/evaluate-response', 'evaluate_response', handle_evaluate_response, methods=['POST'])
 
 # Endpoint Model Management
-bp.add_url_rule('/api/load-finetuned-model', 'load_finetuned_model', handle_load_finetuned_model, methods=['POST'])
 bp.add_url_rule('/api/models', 'get_model_info', handle_get_model_info, methods=['GET'])
 
 # Endpoint Chat dan Riwayat Session (Tersimpan di DB)
