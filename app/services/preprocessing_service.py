@@ -185,95 +185,6 @@ def clean_legal_text(text: str) -> str:
     text = text.strip()
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text
-
-# def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
-#     village_name = "unknown"
-#     regency_name = "unknown"
-#     perdes_number = "unknown"
-#     perdes_year = "unknown"
-#     perdes_title = "unknown"
-    
-#     try:
-#         spaced_keywords = [
-#             'TENTANG', 'MENIMBANG', 'MENGINGAT', 'MEMUTUSKAN', 'MENETAPKAN',
-#             'MEMPERHATIKAN', 'DENGAN', 'RAHMAT', 'TUHAN'
-#         ]
-#         normalized_text = full_text
-#         for kw in spaced_keywords:
-#             spaced_pattern = r'\s+'.join(list(kw))
-#             normalized_text = re.sub(spaced_pattern, kw, normalized_text, flags=re.IGNORECASE)
-        
-#         lines = [line.strip() for line in normalized_text.split('\n') if line.strip()]
-        
-#         header_end = len(lines)
-#         for i, line in enumerate(lines[:30]):
-#             upper = line.upper().strip()
-#             if upper.startswith('MENIMBANG') or upper.startswith('MENGINGAT'):
-#                 header_end = i
-#                 break
-        
-#         for i, line in enumerate(lines[:min(header_end + 5, 25)]):
-#             upper_line = line.upper()
-#             if "KEPALA DESA" in upper_line:
-#                 parts = upper_line.split("KEPALA DESA")
-#                 if len(parts) > 1 and parts[1].strip():
-#                     village_name = parts[1].strip().lower().rstrip('.,:;').strip()
-#             elif "PEMERINTAH DESA" in upper_line and village_name == "unknown":
-#                 parts = upper_line.split("PEMERINTAH DESA")
-#                 if len(parts) > 1 and parts[1].strip():
-#                     village_name = parts[1].strip().lower().rstrip('.,:;').strip()
-            
-#             nomor_match = re.search(r'NOMOR\s*[:\-]?\s*(\d+)\s*TAHUN\s+(\d{4})', upper_line)
-#             if nomor_match and perdes_number == "unknown":
-#                 perdes_number = nomor_match.group(1)
-#                 perdes_year = nomor_match.group(2)
-            
-#             if upper_line.strip() == "TENTANG" and i + 1 < len(lines):
-#                 title_lines = []
-#                 for j in range(i + 1, min(i + 5, len(lines))):
-#                     next_upper = lines[j].upper().strip()
-#                     if next_upper in ["DENGAN RAHMAT TUHAN YANG MAHA ESA", "KEPALA DESA", ""]:
-#                         break
-#                     title_lines.append(lines[j].strip())
-#                 if title_lines:
-#                     perdes_title = " ".join(title_lines).lower()
-        
-#         regency_candidates = re.findall(r'kabupaten\s+([a-zA-Z]+)', full_text, re.IGNORECASE)
-#         if regency_candidates:
-#             stop_words = {'yang', 'dan', 'atau', 'dari', 'di', 'ke', 'pada', 
-#                           'dalam', 'dengan', 'untuk', 'oleh', 'ini', 'itu',
-#                           'nomor', 'tahun', 'republik', 'indonesia', 'negara',
-#                           'daerah', 'bupati', 'peraturan', 'pemerintah'}
-#             filtered = [w.lower() for w in regency_candidates if w.lower() not in stop_words and len(w) > 2]
-#             if filtered:
-#                 from collections import Counter
-#                 regency_name = Counter(filtered).most_common(1)[0][0]
-        
-#         if regency_name == "unknown":
-#             kota_candidates = re.findall(r'kota\s+([a-zA-Z]+)', full_text, re.IGNORECASE)
-#             if kota_candidates:
-#                 stop_words = {'yang', 'dan', 'atau', 'dari', 'di', 'ke', 'pada',
-#                               'dalam', 'dengan', 'untuk', 'oleh', 'ini', 'itu'}
-#                 filtered = [w.lower() for w in kota_candidates if w.lower() not in stop_words and len(w) > 2]
-#                 if filtered:
-#                     from collections import Counter
-#                     regency_name = "kota " + Counter(filtered).most_common(1)[0][0]
-        
-#     except Exception as e:
-#         logger.warning(f"Gagal mengekstrak metadata perdes: {e}")
-    
-#     document_id = f"perdes_{village_name}_{perdes_number}_{perdes_year}"
-#     document_title = f"Peraturan Desa {village_name.title()} No. {perdes_number} Tahun {perdes_year} - {perdes_title.title()}"
-    
-#     return {
-#         "village_name": village_name,
-#         "regency_name": regency_name,
-#         "perdes_number": perdes_number,
-#         "perdes_year": perdes_year,
-#         "perdes_title": perdes_title,
-#         "document_id": document_id,
-#         "document_title": document_title
-#     }
     
 def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
     village_name = "unknown"
@@ -376,7 +287,7 @@ def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
     except Exception as e:
         logger.warning(f"Gagal mengekstrak metadata perdes: {e}")
     
-    document_id = f"perdes_{village_name}_{perdes_number}_{perdes_year}"
+    document_id = f"perdes_dis_{village_name}_{perdes_number}_{perdes_year}"
     document_title = f"Peraturan Desa {village_name.title()} No. {perdes_number} Tahun {perdes_year} - {perdes_title.title()}"
     
     return {
