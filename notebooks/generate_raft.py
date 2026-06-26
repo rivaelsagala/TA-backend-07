@@ -301,12 +301,23 @@ def generate_raft_dataset(all_doc_chunks: Dict, output_path: Path):
     random.seed(42)
     dataset, failed, skipped, unanswerable = [], 0, 0, 0
     
-    # Kumpulkan chunk substantif
+    # DAFTAR DOKUMEN TIDAK BERLAKU / HANYA UNTUK DISTRAKTOR
+    # Masukkan document_id dari PDF yang sudah tidak berlaku di sini.
+    # Contoh: "perdes_biru_10_2016"
+    INVALID_DOC_IDS = [
+        "perdes_biru_10_2016", # Ganti dengan document_id PDF yang sebenarnya tidak berlaku
+    ]
+    
+    # Kumpulkan chunk substantif HANYA dari dokumen yang valid
     all_oracle_candidates = []
     for doc_id, chunks in all_doc_chunks.items():
+        if doc_id in INVALID_DOC_IDS:
+            print(f"Mengabaikan {doc_id} sebagai sumber pertanyaan (Hanya dipakai sebagai Distraktor).")
+            continue
+            
         all_oracle_candidates.extend([(doc_id, c) for c in chunks if is_substantive(c["content"])])
         
-    print(f"Total Chunk Substantif: {len(all_oracle_candidates)}\n")
+    print(f"Total Chunk Substantif (Valid): {len(all_oracle_candidates)}\n")
     pbar = tqdm(all_oracle_candidates, desc="Generating RAFT")
 
     for doc_id, chunk in pbar:

@@ -220,12 +220,18 @@ Mode Opsional:
 9. [Evaluate]     (Opsional, jika evaluate=True pada sesi)
        │          ↳ RAGAS menghitung: faithfulness, answer_relevancy,
        │            context_precision, context_recall, noise_sensitivity
+       │          ↳ SemanticAnswerSimilarity (SAS) menghitung cosine similarity
+       │            antara answer dan ground_truth menggunakan embedding model
+       │          ↳ Semua metrik dikembalikan dalam satu dict evaluation_result
        │
 10. [Save]        Simpan ke PostgreSQL: pertanyaan, jawaban, sources,
-       │          metadata, skor evaluasi RAGAS, similarity_score
+       │          metadata, skor RAGAS + semantic_similarity
        │
 11. [Response]    Kembalikan JSON ke frontend:
-                  {answer, sources, evaluation, model_used, similarity_score}
+                  {answer, sources, evaluation, model_used}
+                  evaluation: {faithfulness, answer_relevancy,
+                               context_precision, context_recall,
+                               noise_sensitivity, semantic_similarity}
 ```
 
 ## C. Alur Chat dengan Model Fine-Tune RAFT
@@ -281,7 +287,7 @@ Mode Opsional:
        │     "raft_metadata": {"analisis": ..., "num_documents": ...}}
        │
 10. [Evaluate]    (Opsional, jika evaluate=True pada sesi)
-       │          ↳ RAGAS menghitung metrik sama seperti Alur B
+       │          ↳ RAGAS + SAS menghitung metrik sama seperti Alur B
        │          ↳ contexts diambil dari raw_doc_chunks (bukan expanded)
        │
 11. [Save]        Simpan ke PostgreSQL dengan field tambahan:
@@ -291,8 +297,10 @@ Mode Opsional:
 12. [Response]    Kembalikan JSON ke frontend dengan field tambahan:
                   {
                     answer, sources, evaluation, model_used,
-                    similarity_score,
                     "analysis": "<thought_process dari RAFT>"  ← KHUSUS RAFT
+                    evaluation: {faithfulness, answer_relevancy,
+                                 context_precision, context_recall,
+                                 noise_sensitivity, semantic_similarity}
                   }
 ```
 
@@ -306,6 +314,140 @@ Mode Opsional:
 | **Endpoint LLM**           | HuggingFace Router / Maia Router           | B200 RAFT Server (`/api/chat-rag`)         |
 | **Field Respons Tambahan** | —                                          | `"analysis"` (chain-of-thought thinking)   |
 | **Chat History Konteks**   | ✅ Dikirim ke LLM                          | ❌ Tidak dikirim (RAFT stateless per-call) |
+
+---
+
+## E. Alur Sistem Evaluasi (Evaluation System Workflow)
+
+> Evaluasi dijalankan **setelah generation selesai** dan hanya aktif jika flag `evaluate=True` pada sesi. Dua komponen berjalan berurutan: **RAGAS** (metrik berbasis LLM) dan **Semantic Answer Similarity / SAS** (metrik berbasis embedding).
+
+```
+[Trigger]   evaluate=True pada sesi + ground_truth dari request payload
+     │
+     │  Input yang tersedia setelah Tahap Generate (Alur B/C):
+     │  • question      → pertanyaan user asli
+     │  • answer        → jawaban dari LLM / RAFT
+     │  • contexts      → list string chunk dari top-5 reranked docs
+     │  • ground_truth  → jawaban pakar (dari payload; fallback ke answer jika None)
+     │
+─────┴──────────────────────────────────────────────────────────────────
+ KOMPONEN 1 — RAGAS (ragas_service.evaluate_single_response)
+─────────────────────────────────────────────────────────────────────────
+     │
+1. [Dataset]   Siapkan HuggingFace Dataset dari satu baris data:
+     │          {question, contexts, answer, ground_truth}
+     │
+2. [LLM Judge] Kirim ke RAGAS evaluate() via LangchainLLMWrapper:
+     │          Model: openai/gpt-3.5-turbo-16k (temperature=0.0)
+     │          Role : juri absolut, tidak berubah antar evaluasi
+     │
+     │  ┌─────────────────────────────────────────────────────────────┐
+     │  │ METRIK YANG DIHITUNG:                                       │
+     │  │                                                             │
+     │  │ ① faithfulness (0–1)                                       │
+     │  │   Input : answer + contexts                                 │
+     │  │   Ukur  : apakah setiap klaim di answer didukung konteks?  │
+     │  │   Tinggi = jawaban grounded, tidak mengarang               │
+     │  │                                                             │
+     │  │ ② answer_relevancy (0–1)                                   │
+     │  │   Input : question + answer                                 │
+     │  │   Ukur  : apakah answer relevan dan menjawab question?     │
+     │  │   Tinggi = jawaban tepat sasaran                           │
+     │  │                                                             │
+     │  │ ③ context_precision (0–1)                                  │
+     │  │   Input : question + contexts + ground_truth               │
+     │  │   Ukur  : seberapa presisi konteks? (chunk relevan di atas) │
+     │  │   Tinggi = konteks tidak banyak noise                      │
+     │  │                                                             │
+     │  │ ④ context_recall (0–1)                                     │
+     │  │   Input : contexts + ground_truth                          │
+     │  │   Ukur  : seberapa banyak info ground_truth ada di konteks?│
+     │  │   Tinggi = konteks lengkap mencakup referensi pakar        │
+     │  │   ⚠️ Akurat hanya jika ground_truth adalah jawaban pakar   │
+     │  │                                                             │
+     │  │ ⑤ noise_sensitivity (0–1)                                  │
+     │  │   Input : question + answer + contexts + ground_truth      │
+     │  │   Ukur  : apakah model terpengaruh konteks tidak relevan?  │
+     │  │   Rendah = model lebih robust terhadap noise               │
+     │  └─────────────────────────────────────────────────────────────┘
+     │
+3. [Result]    df_results = evaluation_result.to_pandas()
+     │          formatted_result = {faithfulness, answer_relevancy,
+     │                              context_precision, context_recall,
+     │                              noise_sensitivity}
+     │
+─────┴──────────────────────────────────────────────────────────────────
+ KOMPONEN 2 — SAS: Semantic Answer Similarity
+             (SemanticAnswerSimilarity.compute_sas)
+─────────────────────────────────────────────────────────────────────────
+     │
+4. [Embed]     Vectorisasi answer + ground_truth dalam SATU API call:
+     │          embed_documents([answer, ground_truth])
+     │          Model: openai/text-embedding-3-large (1536 dim)
+     │
+5. [Cosine]    Hitung cosine similarity antara dua vektor:
+     │          score = dot(vec_a, vec_b) / (norm_a × norm_b)
+     │          Clip ke [0.0, 1.0] agar konsisten
+     │
+6. [Merge]     formatted_result["semantic_similarity"] = sas_score
+     │          → Satu dict evaluasi lengkap dengan 6 metrik
+     │
+─────┴──────────────────────────────────────────────────────────────────
+ PERSISTENSI — Simpan ke Database
+─────────────────────────────────────────────────────────────────────────
+     │
+7. [Save]      chat_service.save_chat_message(evaluation=evaluation_result)
+     │
+     │  Mapping key Python → kolom PostgreSQL:
+     │  ┌──────────────────────┬────────────────────────────────────┐
+     │  │ evaluation dict key  │ Kolom chat_history (FLOAT)         │
+     │  ├──────────────────────┼────────────────────────────────────┤
+     │  │ "faithfulness"       │ faithfulness                       │
+     │  │ "answer_relevancy"   │ answer_relevance                   │
+     │  │ "context_precision"  │ context_precision                  │
+     │  │ "context_recall"     │ context_recall                     │
+     │  │ "noise_sensitivity"  │ noise_sensitivity                  │
+     │  │ "semantic_similarity"│ semantic_similarity                │
+     │  └──────────────────────┴────────────────────────────────────┘
+     │
+     │  Jika evaluate=False → semua kolom evaluasi disimpan sebagai NULL
+     │
+8. [Response]  evaluation_result dikembalikan ke frontend dalam field
+               "evaluation" pada response JSON
+```
+
+### Tabel Ringkasan Metrik Evaluasi
+
+| Metrik                  | Rentang | Input Wajib                              | Memerlukan Ground Truth Pakar | Keterangan Singkat                                          |
+| ----------------------- | ------- | ---------------------------------------- | ----------------------------- | ----------------------------------------------------------- |
+| **faithfulness**        | 0–1     | answer, contexts                         | ❌                            | Klaim di jawaban harus didukung konteks                     |
+| **answer_relevancy**    | 0–1     | question, answer                         | ❌                            | Jawaban harus relevan dan menjawab pertanyaan               |
+| **context_precision**   | 0–1     | question, contexts, ground_truth         | ⚠️ Sebaiknya ada              | Chunk relevan harus di ranking atas                         |
+| **context_recall**      | 0–1     | contexts, ground_truth                   | ✅ Wajib                      | Konteks harus mencakup info dari jawaban pakar              |
+| **noise_sensitivity**   | 0–1     | question, answer, contexts, ground_truth | ✅ Wajib                      | Rendah lebih baik: model tidak terpengaruh noise            |
+| **semantic_similarity** | 0–1     | answer, ground_truth                     | ✅ Wajib                      | Cosine similarity embedding: kesamaan makna jawaban vs pakar|
+
+### Penanganan Kasus ground_truth Tidak Diberikan
+
+```
+Jika ground_truth = None pada request payload:
+  → ragas_service memberi WARNING di log
+  → ground_truth di-fallback ke answer (jawaban LLM itu sendiri)
+  → Konsekuensi:
+      • context_recall   → TIDAK VALID (mengukur konteks vs jawaban LLM, bukan pakar)
+      • noise_sensitivity → TIDAK VALID (menggunakan jawaban LLM sebagai referensi)
+      • semantic_similarity → SELALU 1.0 (answer == ground_truth)
+  → Metrik faithfulness & answer_relevancy TETAP VALID
+```
+
+### Konfigurasi LLM Judge & Embedding (ragas_service.py)
+
+| Komponen              | Model                             | Parameter Kunci             | Tujuan                                |
+| --------------------- | --------------------------------- | --------------------------- | ------------------------------------- |
+| **LLM Judge (RAGAS)** | `openai/gpt-3.5-turbo-16k`       | `temperature=0.0`, max 2000 | Juri stabil & deterministik           |
+| **Embeddings (RAGAS)**| `openai/text-embedding-3-large`   | 1536 dimensi                | Representasi semantik untuk relevancy |
+| **SAS Embedder**      | `openai/text-embedding-3-large`   | Sama dengan RAGAS embedder  | Cosine similarity answer vs truth     |
+| **Wrapper**           | `LangchainLLMWrapper` + `LangchainEmbeddingsWrapper` | — | Standardisasi format JSON RAGAS |
 
 ---
 
@@ -451,9 +593,13 @@ Sistem mendukung **8 model LLM yang dapat dipilih**, mencakup model open-source 
 
 Terintegrasi dengan model fine-tuned berbasis **RAFT (Retrieval-Augmented Fine-Tuning)** yang di-host pada server GPU dedicated (B200). Model ini dilatih khusus untuk menjawab pertanyaan hukum peraturan desa, mampu melakukan reasoning internal terhadap dokumen, dan menghasilkan analisis berpikir (_thought process_) yang dapat ditampilkan ke pengguna.
 
-### 6. 📊 Automated RAGAS Evaluation
+### 6. 📊 Automated RAGAS + Semantic Similarity Evaluation
 
-Evaluasi kualitas RAG dilakukan secara otomatis menggunakan framework **RAGAS** dengan 5 metrik: Faithfulness, Answer Relevancy, Context Precision, Context Recall, dan Noise Sensitivity. Evaluasi berjalan per sesi dan hasilnya tersimpan di database untuk keperluan analisis dan skripsi.
+Evaluasi kualitas RAG dilakukan secara otomatis menggunakan dua komponen yang berjalan berurutan:
+- **RAGAS Framework** — menghitung 5 metrik berbasis LLM Judge (GPT-3.5-turbo): Faithfulness, Answer Relevancy, Context Precision, Context Recall, dan Noise Sensitivity.
+- **Semantic Answer Similarity (SAS)** — menghitung cosine similarity antara embedding `answer` dan `ground_truth` menggunakan `text-embedding-3-large`, menghasilkan skor kesamaan makna (0–1) yang tidak bergantung pada format atau tanda baca.
+
+Evaluasi berjalan per sesi (dikontrol flag `evaluate` di `chat_sessions`), dan seluruh 6 metrik tersimpan sebagai kolom FLOAT di tabel `chat_history` untuk keperluan analisis dan skripsi.
 
 ### 7. 🔒 Topic Guard & Confidence Threshold
 
@@ -483,7 +629,7 @@ Sistem menggunakan dua database yang terpisah berdasarkan fungsinya:
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | **`users`**         | `id`, `username`, `password`, `created_at`                                                                                                                                                                          | Menyimpan data autentikasi pengguna sistem                                                                                    |
 | **`chat_sessions`** | `id`, `user_id`, `session_name`, `evaluate`, `created_at`                                                                                                                                                           | Merepresentasikan satu sesi percakapan. Field `evaluate` (BOOLEAN) menentukan apakah evaluasi RAGAS aktif untuk sesi tersebut |
-| **`chat_history`**  | `id`, `session_id`, `user_id`, `user_query`, `llm_response`, `metadata` (JSONB), `is_evaluated`, `faithfulness`, `answer_relevance`, `context_precision`, `context_recall`, `noise_sensitivity`, `similarity_score` | Menyimpan setiap pasang tanya-jawab beserta seluruh metrik evaluasi RAGAS dalam kolom bertipe FLOAT yang terstruktur          |
+| **`chat_history`**  | `id`, `session_id`, `user_id`, `user_query`, `llm_response`, `metadata` (JSONB), `is_evaluated`, `faithfulness`, `answer_relevance`, `context_precision`, `context_recall`, `noise_sensitivity`, `semantic_similarity` | Menyimpan setiap pasang tanya-jawab beserta seluruh metrik evaluasi RAGAS + SAS dalam kolom bertipe FLOAT yang terstruktur. Kolom evaluasi bernilai NULL jika sesi tidak mengaktifkan evaluasi. |
 | **`chunks_perdes`** | `id`, `file_name`, `content`, `metadata` (JSONB), `created_at`                                                                                                                                                      | Tabel opsional untuk menyimpan hasil chunking dokumen di sisi PostgreSQL                                                      |
 
 ## Supabase (PostgreSQL + pgvector) — Vector Store

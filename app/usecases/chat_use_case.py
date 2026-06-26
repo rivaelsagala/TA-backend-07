@@ -161,7 +161,6 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
         else:
             logger.info(f"RAGAS evaluation skipped (evaluate=False) for model_id={model_id}")
             
-        # 5. Ekstraksi Similarity Score tertinggi (QA: diambil dari chunk paling relevan urutan ke-1)
         similarity_score = None
         sources = rag_result.get("sources", [])
         if sources and isinstance(sources, list) and isinstance(sources[0], dict):
@@ -187,7 +186,6 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             llm_response=rag_result["answer"], 
             metadata=metadata,
             evaluation=evaluation_result,         # Kirim dictionary dari RAGAS
-            similarity_score=similarity_score     # Kirim float similarity
         )
         
         # Build response
@@ -197,7 +195,6 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             "answer": rag_result["answer"],
             "sources": sources,
             "evaluation": evaluation_result,
-            "similarity_score": similarity_score, # Optional: tampilkan juga di response API
             "model_used": rag_result.get("model_used", "Unknown Model")
         }
         
