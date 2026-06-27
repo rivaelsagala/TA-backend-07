@@ -5,9 +5,8 @@ from app.services.rag_service import get_answer_from_rag
 from app.services import chat_service
 from app.services.ragas_service import ragas_service
 
-# Maksimal jumlah pesan history yang dikirim ke LLM (5 pairs = 10 messages)
-# Terlalu banyak history bisa memenuhi context window dan memperlambat response
-MAX_HISTORY_MESSAGES = 10
+
+MAX_HISTORY_MESSAGES = 6
 
 
 def _get_recent_history(session_id: int, max_messages: int = MAX_HISTORY_MESSAGES) -> list:

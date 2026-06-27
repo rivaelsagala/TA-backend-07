@@ -102,7 +102,7 @@ def get_session_history(session_id: int, limit: int = None):
                     # agar hasilnya tetap kronologis (pesan lama → baru)
                     cur.execute("""
                         SELECT * FROM (
-                            SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, semantic_similarity
+                            SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, semantic_similarity, metadata
                             FROM chat_history 
                             WHERE session_id = %s 
                             ORDER BY created_at DESC
@@ -113,16 +113,60 @@ def get_session_history(session_id: int, limit: int = None):
                 else:
                     # Ambil SEMUA history (untuk ditampilkan di frontend)
                     cur.execute("""
-                        SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, semantic_similarity
+                        SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, semantic_similarity, metadata
                         FROM chat_history 
                         WHERE session_id = %s 
                         ORDER BY created_at ASC
                     """, (session_id,))
                 
                 results = cur.fetchall()
+                formatted_results = []
                 for r in results:
                     if r.get('created_at'): r['created_at'] = r['created_at'].isoformat()
-                return results
+                    
+                    if r.get('metadata'):
+                        if isinstance(r['metadata'], str):
+                            try:
+                                metadata_dict = json.loads(r['metadata'])
+                                sources = metadata_dict.get('sources', [])
+                            except json.JSONDecodeError:
+                                sources = []
+                        elif isinstance(r['metadata'], dict):
+                            sources = r['metadata'].get('sources', [])
+                        else:
+                            sources = []
+                        
+                        # Hapus 'metadata' dari setiap source agar respons tidak terlalu besar
+                        cleaned_sources = []
+                        for s in sources:
+                            if isinstance(s, dict):
+                                cleaned_source = {k: v for k, v in s.items() if k != 'metadata'}
+                                cleaned_sources.append(cleaned_source)
+                            else:
+                                cleaned_sources.append(s)
+                                
+                        r['sources'] = cleaned_sources
+                        del r['metadata']
+                    else:
+                        r['sources'] = []
+                    
+                    # Susun ulang urutan key agar user_query tampil paling atas (Python 3.7+ mempertahankan urutan dictionary)
+                    ordered_row = {
+                        "user_query": r.get("user_query"),
+                        "llm_response": r.get("llm_response"),
+                        "sources": r.get("sources", []),
+                        "id": r.get("id"),
+                        "created_at": r.get("created_at"),
+                        "faithfulness": r.get("faithfulness"),
+                        "answer_relevance": r.get("answer_relevance"),
+                        "context_precision": r.get("context_precision"),
+                        "context_recall": r.get("context_recall"),
+                        "noise_sensitivity": r.get("noise_sensitivity"),
+                        "semantic_similarity": r.get("semantic_similarity")
+                    }
+                    formatted_results.append(ordered_row)
+                    
+                return formatted_results
     except Exception as e:
         logger.error(f"Error get_session_history: {e}")
         return []

@@ -14,6 +14,9 @@ def create_app():
     app = Flask(__name__)
 
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'rag-peraturan-desa-secret')
+    app.config['JSON_SORT_KEYS'] = False
+    if hasattr(app, 'json'):
+        app.json.sort_keys = False
 
     # CORS — izinkan semua origin, expose header custom
     CORS(app, resources={r"/*": {"origins": "*"}}, expose_headers=["X-Chatbot-Text"])

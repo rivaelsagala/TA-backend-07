@@ -287,7 +287,7 @@ def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
     except Exception as e:
         logger.warning(f"Gagal mengekstrak metadata perdes: {e}")
     
-    document_id = f"perdes_dis_{village_name}_{perdes_number}_{perdes_year}"
+    document_id = f"perdes_{village_name}_{perdes_number}_{perdes_year}"
     document_title = f"Peraturan Desa {village_name.title()} No. {perdes_number} Tahun {perdes_year} - {perdes_title.title()}"
     
     return {

@@ -575,7 +575,11 @@ Jika ground_truth = None pada request payload:
 
 ### 1. 🔍 Multi-Stage RAG Pipeline
 
-Pipeline RAG yang berlapis: **Retrieval (k=20) → Re-ranking (k=5) → Adjacent Chunk Expansion → Generation**. Setiap tahap meningkatkan kualitas konteks yang diberikan ke LLM, sehingga jawaban yang dihasilkan lebih akurat dan terpercaya.
+Pipeline RAG yang berlapis dan sistematis: **Retrieval (k=20) → Re-ranking (k=5) → Adjacent Chunk Expansion → Generation**.
+- **Tahap 1 (Retrieval):** Mengambil 20 kandidat dokumen (chunk) teratas yang secara semantik mirip dengan pertanyaan.
+- **Tahap 2 (Re-ranking):** AI Cross-Encoder menilai ulang 20 kandidat tersebut secara ketat, lalu membuang 15 terbawah dan hanya menyisakan **5 pemenang (Top 5)**.
+- **Tahap 3 (Expansion):** Khusus untuk 5 pemenang ini, sistem menarik paragraf tetangganya (sebelum & sesudah) untuk melengkapi teks yang terpotong.
+Setiap tahap berfokus pada efisiensi dan akurasi, memastikan LLM hanya menerima konteks yang paling relevan namun utuh.
 
 ### 2. 📝 Legal Document-Aware Chunking
 
@@ -607,7 +611,33 @@ Sistem memiliki dua lapisan filter: **Off-Topic Filter** (berbasis keyword) meno
 
 ### 8. 📂 Smart Adjacent Chunk Expansion
 
-Saat chunk pasal yang relevan ditemukan, sistem secara otomatis mengambil **chunk tetangga (pasal/butir sebelum dan sesudah)** dari Supabase untuk memberikan konteks yang lebih lengkap kepada LLM, mengatasi keterbatasan dokumen yang terpotong di batas chunk.
+Sistem mengatasi masalah teks terpotong (akibat proses _chunking_ di awal) dengan fitur **Ekspansi Chunk Bertetangga**. Setelah proses _Re-ranking_ menghasilkan **5 chunk pemenang (Top 5)**, sistem secara otomatis kembali ke database untuk mengambil 1 chunk tepat **sebelum** dan 1 chunk tepat **sesudah** dari masing-masing pemenang tersebut. 
+
+Hasilnya, LLM tidak hanya membaca 1 potongan kecil teks, melainkan membaca **5 blok teks yang utuh**. Karena masing-masing dari 5 pemenang ini diekspansi menjadi 3 bagian, total teks yang disuapkan ke LLM setara dengan 15 chunk dokumen (5 blok × 3 chunk).
+
+**Visualisasi Output Tahapan ke LLM:**
+- **Blok 1 (Top 1 Re-ranking):** Berisi `[Konteks Sebelumnya]` + `[Bagian Utama]` + `[Konteks Berikutnya]`
+- **Blok 2 (Top 2 Re-ranking):** Berisi `[Konteks Sebelumnya]` + `[Bagian Utama]` + `[Konteks Berikutnya]`
+- **Blok 3 (Top 3 Re-ranking):** Berisi `[Konteks Sebelumnya]` + `[Bagian Utama]` + `[Konteks Berikutnya]`
+- **Blok 4 (Top 4 Re-ranking):** Berisi `[Konteks Sebelumnya]` + `[Bagian Utama]` + `[Konteks Berikutnya]`
+- **Blok 5 (Top 5 Re-ranking):** Berisi `[Konteks Sebelumnya]` + `[Bagian Utama]` + `[Konteks Berikutnya]`
+
+**Contoh Bentuk Fisik 1 Blok Teks:**
+```text
+[Sumber: Peraturan Desa Majasetra No. 1 Tahun 2018] [Desa: majasetra]
+
+[Konteks Sebelumnya — pasal/butir sebelumnya]
+BAB I KETENTUAN UMUM
+Pasal 1
+Dalam Peraturan Desa ini yang dimaksud dengan :
+
+[Bagian Utama]
+5. Desa adalah kesatuan masyarakat hukum yang memiliki batas wilayah yang berwenang untuk mengatur dan mengurus urusan pemerintahan...
+
+[Konteks Berikutnya — pasal/butir selanjutnya]
+6. Pemerintahan Desa adalah penyelenggaraan urusan pemerintahan dan kepentingan masyarakat setempat...
+```
+Dengan struktur seperti ini, pemahaman hierarki LLM menjadi sempurna dan mampu mengutip sumber dengan sangat spesifik.
 
 ### 9. 💬 Persistent Chat Session & History
 
