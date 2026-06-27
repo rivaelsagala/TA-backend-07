@@ -715,6 +715,9 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
         if not is_raft:
             context_block = _build_expanded_context_block(doc, adjacent_map)
             context_texts.append(context_block)
+        #     sources.append({"content": context_block, "metadata": metadata})
+        # else:
+        #     sources.append({"content": doc.page_content, "metadata": metadata})
         raw_doc_chunks.append(doc.page_content)
         sources.append({"content": doc.page_content, "metadata": metadata})
     
