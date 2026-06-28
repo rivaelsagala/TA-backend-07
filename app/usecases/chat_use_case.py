@@ -187,14 +187,19 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             evaluation=evaluation_result,         # Kirim dictionary dari RAGAS
         )
         
+        # Remove metadata from sources for cleaner API response
+        cleaned_sources = [{"content": src.get("content")} if isinstance(src, dict) else src for src in sources]
+
         # Build response
         response_body = {
             "status": "success",
             "message": "Jawaban berhasil diproses",
             "answer": rag_result["answer"],
-            "sources": sources,
+            "sources": cleaned_sources,
             "evaluation": evaluation_result,
-            "model_used": rag_result.get("model_used", "Unknown Model")
+            "model_used": rag_result.get("model_used", "Unknown Model"),
+            "retrieval_time": rag_result.get("retrieval_time"),
+            "inference_time": rag_result.get("inference_time")
         }
         
         # Tambahkan field analysis hanya jika ada (model RAFT)
@@ -204,8 +209,18 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
         return response_body, 200
 
     except Exception as e:
-        logger.error(f"Error in chat_with_history: {str(e)}")
-        return {"status": "error", "message": f"Server error: {str(e)}"}, 500
+        error_msg = str(e).lower()
+        logger.error(f"Error in chat_with_history: {error_msg}")
+        
+        # Deteksi spesifik untuk Timeout
+        if "timeout" in error_msg:
+            return {"status": "error", "message": "Proses inferensi atau pencarian terlalu lama (Request Timeout)."}, 408
+            
+        # Deteksi kegagalan koneksi (misal ke Vector DB atau API LLM)
+        if "unauthorized" in error_msg or "invalid username or password" in error_msg:
+            return {"status": "error", "message": "Gagal terhubung ke layanan AI (Unauthorized). Periksa API Key."}, 401
+            
+        return {"status": "error", "message": f"Server error internal: {str(e)}"}, 500
     
 def create_new_session(user_id: int, session_name: str, evaluate: bool = False) -> Tuple[Dict[str, Any], int]:
     session_id = chat_service.create_chat_session(user_id, session_name, evaluate)

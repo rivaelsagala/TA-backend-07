@@ -1,0 +1,39 @@
+Test Case 1
+Pertanyaan: Berdasarkan Peraturan Desa tentang Organisasi Pemerintah Desa, apa pengertian dari Pemerintah Desa? Ground Truth: Pemerintah Desa adalah Kepala Desa dibantu Perangkat Desa sebagai unsur penyelenggara pemerintahan desa. (Referensi: Bab I Ketentuan Umum Pasal 1 poin 10)
+
+Test Case 2
+Pertanyaan: Apa saja unsur pembantu Kepala Desa yang termasuk dalam perangkat desa berdasarkan Pasal 2? Ground Truth: Perangkat Desa berkedudukan sebagai unsur pembantu Kepala Desa yang terdiri atas tiga unsur, yaitu: Sekretariat Desa, Pelaksana Kewilayahan, dan Pelaksana Teknis. (Referensi: Bab II Pasal 2 ayat 2)
+
+Test Case 3
+Pertanyaan: Sebutkan pembagian urusan yang ada di dalam Sekretariat Desa! Ground Truth: Sekretariat Desa paling banyak terdiri atas 3 (tiga) urusan yaitu urusan tata usaha dan umum, urusan keuangan, dan urusan perencanaan, dan paling sedikit 2 (dua) urusan yaitu urusan umum dan perencanaan, dan urusan keuangan. (Referensi: Bab II Pasal 3 ayat 2)
+
+Test Case 4
+Pertanyaan: Apa saja fungsi dari Kepala Seksi Pelayanan menurut Peraturan Desa tentang Organisasi Pemerintah Desa? Ground Truth: Kepala seksi pelayanan memiliki fungsi melaksanakan penyuluhan dan motivasi terhadap pelaksanaan hak dan kewajiban masyarakat, meningkatkan upaya partisipasi masyarakat, pelestarian nilai sosial budaya masyarakat, keagamaan, dan ketenagakerjaan. (Referensi: Bab II Pasal 9 ayat 3 huruf c)
+
+Test Case 5
+Pertanyaan: Berapa rentang batas usia yang menjadi syarat umum bagi warga desa yang ingin mendaftar menjadi Perangkat Desa? Ground Truth: Syarat usianya adalah minimal 20 (dua puluh) tahun sampai dengan maksimal 42 (empat puluh dua) tahun. (Referensi: Bab II Pasal 11 ayat 2 huruf e)
+
+Test Case 6
+Pertanyaan: Berapa lama minimal seorang warga harus bertempat tinggal di desa sebelum ia bisa mendaftar sebagai calon Perangkat Desa? Ground Truth: Harus terdaftar sebagai penduduk Desa dan bertempat tinggal di Desa paling singkat 1 (satu) tahun sebelum pendaftaran. (Referensi: Bab II Pasal 11 ayat 2 huruf f)
+
+Test Case 7
+Pertanyaan: Jika ada jabatan Perangkat Desa yang kosong, berapa lama batas maksimal waktu yang diberikan untuk melaksanakan pengisian jabatan tersebut? Ground Truth: Pengisian jabatan Perangkat Desa yang kosong dilaksanakan paling lambat 2 (dua) bulan terhitung sejak Perangkat Desa yang bersangkutan berhenti. (Referensi: Bab II Pasal 15 ayat 3)
+
+Test Case 8
+Pertanyaan: Pada usia berapa seorang Perangkat Desa akan diberhentikan secara otomatis dari jabatannya? Ground Truth: Perangkat Desa diberhentikan dari jabatannya karena usia telah genap 60 (enam puluh) tahun. (Referensi: Bab II Pasal 13 ayat 3 huruf a)
+
+Test Case 9
+Pertanyaan: Berapa lama batas waktu paling lambat bagi Kepala Desa untuk menyampaikan surat keputusan pemberhentian perangkat desa yang meninggal dunia atau atas permintaan sendiri kepada Camat? Ground Truth: Pemberhentian perangkat desa ditetapkan dengan Keputusan Kepala Desa dan disampaikan kepada Camat paling lambat 14 (empat belas) hari setelah ditetapkan. (Referensi: Bab II Pasal 13 ayat 4)
+
+Test Case 10
+Pertanyaan: Apakah seorang Perangkat Desa diperbolehkan untuk ikut serta dalam kepengurusan sebuah partai politik? Ground Truth: Tidak, Perangkat Desa dilarang untuk menjadi pengurus partai politik. (Referensi: Bab II Pasal 17 poin 8)
+
+Saran Pengujian (RAFT Pipeline): Untuk menguji kekebalan (robustness) model Anda terhadap distraktor, Anda dapat memberikan pertanyaan-pertanyaan RAG asli (misalnya tentang aturan yang valid dan berlaku) namun menyelipkan paragraf-paragraf dari Perdes ini di dalam context retrieval model. Model yang sudah di-finetuning RAFT harus bisa menolak jawaban yang bersumber dari distraktor ini dan tetap menggunakan pengetahuan dasar atau oracle document yang valid.
+
+Test Case 11
+Pertanyaan: Berdasarkan Peraturan Desa Majasetra tentang Kewenangan Desa, melalui forum apa pemilihan kewenangan Desa Majasetra dilakukan? Ground Truth: Pemilihan kewenangan Desa Majasetra dilakukan dalam forum Musyawarah Desa yang diselenggarakan oleh Badan Permusyawaratan Desa (BPD). (Referensi: Bab VI Pasal 12 ayat 1 Perdes Majasetra No 1 Tahun 2018)
+
+Test Case 12
+Pertanyaan: Menurut Pasal 12 Peraturan Desa Majasetra Nomor 1 Tahun 2018, siapa saja yang termasuk ke dalam "Unsur masyarakat" yang diundang untuk menghadiri Musyawarah Desa? Ground Truth: Unsur masyarakat tersebut terdiri dari perwakilan perangkat desa, anggota Badan Permusyawaratan Desa (BPD), perwakilan kecamatan, perwakilan pengusaha lokal, dan ketua rukun warga (RW). (Referensi: Bab VI Pasal 12 ayat 2 Perdes Majasetra No 1 Tahun 2018)
+
+Tips Integrasi ke RAFT Dataset: Pastikan ke-12 pertanyaan (10 dari sebelumnya + 2 terbaru) ini Anda masukkan ke dalam file JSONL RAG-RAFT generator Anda. Saat pipeline menjalankan dataset ini dengan kondisi Oracle Absent (dimana context yang diberikan hanya berasal dari file distraktor ini), maka asisten AI yang dilatih seharusnya merespon dengan: "Maaf, saya tidak dapat menjawab pertanyaan ini karena informasi yang diminta tidak tersedia di dalam konteks referensi yang relevan" (atau variasi kalimat penolakan lainnya sesuai system prompt Anda).

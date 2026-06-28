@@ -8,8 +8,8 @@ MODEL_NAME = 'cross-encoder/ms-marco-MiniLM-L6-v2'
 
 try:
     logger.info(f"Memuat model Cross-Encoder untuk Re-ranking: {MODEL_NAME}...")
-    # max_length=512 menyesuaikan panjang chunk dokumen peraturan desa
-    cross_encoder = CrossEncoder(MODEL_NAME, max_length=1024)
+    # max_length=512 menyesuaikan panjang chunk dokumen peraturan desa dan limit arsitektur model
+    cross_encoder = CrossEncoder(MODEL_NAME, max_length=512)
     logger.info("Model Cross-Encoder berhasil dimuat!")
 except Exception as e:
     logger.error(f"Gagal memuat model Cross-Encoder: {e}")
