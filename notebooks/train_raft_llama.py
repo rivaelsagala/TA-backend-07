@@ -5,7 +5,8 @@ from peft import LoraConfig, get_peft_model
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    TrainingArguments
+    TrainingArguments,
+    EarlyStoppingCallback
 )
 from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
 
@@ -17,12 +18,12 @@ DATASET_PATH = "../data/dataset/raft_dataset_final.jsonl"
 OUTPUT_DIR = "../models/llama-3.1-8b-raft-lora"
 
 # LoRA & Training Params (Cocok untuk GPU besar seperti B200 / A100)
-LORA_R = 64
-LORA_ALPHA = 128
+LORA_R = 32
+LORA_ALPHA = 64
 BATCH_SIZE = 16
 GRADIENT_ACCUMULATION = 2
 EPOCHS = 3
-LEARNING_RATE = 2e-4
+LEARNING_RATE = 1e-4
 MAX_SEQ_LENGTH = 4096 # Penting: karena dokumen RAFT panjang
 
 # ---------------------------------------------------------------------------
@@ -31,21 +32,23 @@ MAX_SEQ_LENGTH = 4096 # Penting: karena dokumen RAFT panjang
 def format_raft_prompt(sample):
     """
     Mengubah format RAFT menjadi format percakapan Llama 3.1
-    Memaksa model untuk mengeluarkan <thought> sebelum menjawab.
+    Format RAFT: completion-only target, grounded pada dokumen yang diberikan.
     """
     sys_prompt = (
-        "Anda adalah asisten AI ahli hukum desa yang sangat teliti. "
-        "Gunakan dokumen yang disediakan untuk menjawab pertanyaan. "
-        "Jika jawaban tidak ada di dokumen, Anda WAJIB menolak menjawab secara halus."
+        "Anda adalah asisten AI ahli hukum desa yang sangat teliti.\n"
+        "Gunakan HANYA informasi yang terdapat pada dokumen.\n"
+        "Jangan menggunakan pengetahuan di luar dokumen.\n"
+        "Jika dokumen tidak cukup, katakan informasi tidak ditemukan."
     )
     
-    # Gabungkan 5 dokumen menjadi 1 string
-    docs_text = "\n\n".join([f"--- Dokumen {i+1} ---\n{doc}" for i, doc in enumerate(sample["documents"])])
+    # Gabungkan 5 dokumen menjadi 1 string dengan delimiter yang kuat
+    docs_text = "\n\n".join([f"<document id={i+1}>\n{doc}\n</document>" for i, doc in enumerate(sample["documents"])])
     
     user_prompt = f"Question:\n{sample['instruction']}\n\nDocuments:\n{docs_text}"
     
-    # Target yang harus dipelajari model (CoT / Thought Process)
-    assistant_response = f"<thought>\n{sample['thought_process']}\n</thought>\n\n{sample['completion']}"
+    # Sesuai best practice: Jangan melatih <thought> jika Llama 3.1 tidak diprogram untuk CoT eksplisit.
+    # apply_chat_template otomatis akan menambahkan <|eot_id|> di akhir teks.
+    assistant_response = sample['completion']
     
     # Llama 3 Chat Template
     messages = [
@@ -128,6 +131,10 @@ def main():
         logging_steps=5,
         save_strategy="epoch",
         evaluation_strategy="epoch", # Evaluasi di setiap epoch
+        load_best_model_at_end=True, # Tambahan untuk Best Model
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
+        seed=42,                     # Reproducibility
         optim="adamw_torch_fused",   # Fused optimizer lebih cepat
         bf16=True,                   # B200 sangat mendukung BFloat16
         max_grad_norm=0.3,
@@ -135,6 +142,9 @@ def main():
         lr_scheduler_type="cosine",
         report_to="none"
     )
+    
+    # Aktifkan gradient checkpointing untuk menghemat memori
+    model.gradient_checkpointing_enable()
 
     trainer = SFTTrainer(
         model=model,
@@ -145,6 +155,8 @@ def main():
         tokenizer=tokenizer,
         args=training_args,
         data_collator=collator,
+        packing=False,               # Eksplisit set False atau True tergantung dataset
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=2)] # Early Stopping
     )
 
     trainer.train()

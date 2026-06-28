@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 from typing import Optional, Dict, Any, List
 from loguru import logger
@@ -640,6 +641,8 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     # ==========================================
     # TAHAP 0: QUERY REWRITING (Follow-up Resolution)
     # ==========================================
+    t0_retrieval = time.time()
+    
     # Jika ada chat history, rewrite query ambigu menjadi standalone.
     # Contoh: "apa isi pasal satu itu?" → "apa isi pasal 1 dalam Perdes Kesehatan
     # Ibu Bayi Baru Lahir Desa Biru No. 07 Tahun 2015?"
@@ -705,6 +708,9 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     if not is_raft:
         logger.info("Tahap 3: Adjacent Chunk Expansion — mengambil chunk tetangga...")
         adjacent_map = fetch_adjacent_chunks(reranked_docs, window=1)
+        
+    t1_retrieval = time.time()
+    retrieval_time = t1_retrieval - t0_retrieval
     
     # 4. Ekstrak konteks dan sumber dokumen
     context_texts = []
@@ -728,6 +734,7 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     
     raft_metadata_holder = {} if is_raft else None
     
+    t0_inference = time.time()
     answer = hf_service.chat_with_context(
         user_question=query,
         context=context_joined,
@@ -736,6 +743,8 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
         raw_doc_chunks=raw_doc_chunks,
         _raft_metadata_out=raft_metadata_holder  # RAFT metadata akan disimpan di sini
     )
+    t1_inference = time.time()
+    inference_time = t1_inference - t0_inference
     
     # Fallback jika API gagal atau mengembalikan None
     final_answer = answer if answer else "Maaf, terjadi kesalahan saat mencoba menghasilkan jawaban dari model bahasa."
@@ -750,5 +759,7 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
         "sources": sources,
         "model_used": model_info["name"],
         "confidence_score": top_score,
-        "analysis": raft_analysis
+        "analysis": raft_analysis,
+        "retrieval_time": retrieval_time,
+        "inference_time": inference_time
     }
