@@ -184,11 +184,15 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             user_query=user_question, 
             llm_response=rag_result["answer"], 
             metadata=metadata,
-            evaluation=evaluation_result,         # Kirim dictionary dari RAGAS
+            evaluation=evaluation_result,   
         )
         
-        # Remove metadata from sources for cleaner API response
-        cleaned_sources = [{"content": src.get("content")} if isinstance(src, dict) else src for src in sources]
+        # # Remove metadata from sources for cleaner API response
+        # cleaned_sources = [{"content": src.get("content")} if isinstance(src, dict) else src for src in sources]
+
+
+        # Sertakan metadata beserta content di dalam sources untuk API response
+        cleaned_sources = [{"content": src.get("content"), "metadata": src.get("metadata")} if isinstance(src, dict) else src for src in sources]
 
         # Build response
         response_body = {

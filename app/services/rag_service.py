@@ -706,8 +706,8 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     # ==========================================
     adjacent_map = {}
     if not is_raft:
-        logger.info("Tahap 3: Adjacent Chunk Expansion — mengambil chunk tetangga...")
-        adjacent_map = fetch_adjacent_chunks(reranked_docs, window=1)
+        logger.info("Tahap 3: Adjacent Chunk Expansion dinonaktifkan (dikomen).")
+        # adjacent_map = fetch_adjacent_chunks(reranked_docs, window=1)
         
     t1_retrieval = time.time()
     retrieval_time = t1_retrieval - t0_retrieval
