@@ -14,6 +14,10 @@ Peraturan Desa (Perdes) merupakan regulasi hukum yang mengatur kehidupan masyara
 
 ---
 
+> [!WARNING]
+> **CATATAN KETIDAKSESUAIAN DENGAN LAPORAN TA:** 
+> Di dalam Abstrak Laporan TA, disebutkan sistem menggunakan **FAISS** dan **sentence-transformer** dengan jumlah **16 dokumen** (atau 126 di abstrak Inggris). Namun, implementasi kode backend & dokumentasi ini menggunakan **Supabase (pgvector)** dan **OpenAI 	ext-embedding-3-large**. Anda HARUS merevisi Laporan TA Anda agar sesuai dengan implementasi kode sesungguhnya.
+
 # Technology Stack
 
 | Kategori                    | Teknologi                                    | Fungsi                                                                       |
@@ -99,7 +103,124 @@ Setiap lapisan memiliki tanggung jawab yang terdefinisi dengan jelas. Handler me
 
 # System Workflow
 
+## Overview: End-to-End RAG & RAFT Pipeline
+
+Berikut adalah gambaran besar (_big picture_) alur kerja keseluruhan sistem, mulai dari pemrosesan dokumen mentah, pembuatan dataset dan fine-tuning RAFT, hingga proses tanya jawab dan evaluasi.
+
+```text
+(PDF Peraturan Desa)
+                         │
+                         ▼
+                 Data Preprocessing
+      (OCR, Cleaning, Metadata, Chunking)
+              ┌────────────┴────────────┐
+              │                         │
+              ▼                         ▼
+      Embedding + Vector DB      Build RAFT Dataset
+              │            (Question, Context, Answer)
+              │                         │
+              │                         ▼
+              │                  LoRA Fine-Tuning
+              │                         │
+              │                         ▼
+              │                  Fine-Tuned Model
+              │                         │
+      ┌───────┴───────┐                 │
+      ▼               ▼                 │
+User Query        User Query            │
+      │               │                 │
+      ▼               ▼                 │
+Query Embedding   Query Embedding       │
+      │               │                 │
+      ▼               ▼                 │
+Similarity Search Similarity Search     │
+(Vector DB)       (Vector DB)           │
+      │               │                 │
+      ▼               ▼                 │
+Retrieved Context Retrieved Context     │
+      │               │                 │
+      ▼               ▼                 │
+ ┌─────────┐     ┌─────────┐            │
+ │ Baseline│     │  RAFT   │◄───────────┘
+ │   LLM   │     │  LLM    │ (Model disuntikkan ke sini)
+ │ (Prompt)│     │ (Prompt)│
+ └────┬────┘     └────┬────┘
+      │               │
+      ▼               ▼
+ Baseline           RAFT
+  Answer           Answer
+      └───────┬───────┘
+              ▼
+    Evaluation Comparison
+(Faithfulness, Answer Relevancy,
+ Context Precision, Context Recall,
+ Noise Sensitivity, Latency)
+              │
+              ▼
+     Comparative Analysis
+```
+
 ## A. Alur Ingestion Dokumen (Satu Kali Setup)
+
+### Flowchart: End-to-End Ingestion Pipeline (PDF to Database)
+
+Berikut adalah detail logika alur kerja (workflow) dari API ingestion yang melibatkan `embedding_use_case` dan `preprocessing_service`:
+
+```text
+[POST /api/generate-embedding]
+          │
+          ▼
+ingest_pdf_to_vector_db(file_path, save_to_db)
+          │
+          ▼
+extract_and_chunk_pdf(file_path, save_to_db) ─────────────────────┐
+          │                                                       │
+          ├─► extract_text_from_pdf()                             │
+          │   (PyMuPDF / Fallback OCR)                            │
+          │                                                       │
+          ├─► chunk_documents(documents)                          │
+          │   (Cleaning, Metadata, Structural Chunking)           │
+          │                                                       │
+          ├─► save_results_to_folder()                            │
+          │   (Simpan file lokal .txt & .json untuk review)       │
+          │                                                       │
+          ├─► if save_to_db == True:                              │
+          │       save_chunks_to_postgres()                       │
+          │       (Simpan teks asli ke tabel chunks_perdes)       │
+          │                                                       │
+          └───────────────────────────────────────────────────────┘
+          │
+          ▼
+   Metadata Injection
+(Inject source_file, document_id,
+ village_name, perdes_number, dll)
+          │
+          ▼
+Is save_to_db == True?
+          │
+    ┌─────┴─────┐
+   YES          NO
+    │           │
+    ▼           ▼
+Check Existing  Return "PREVIEW MODE"
+Document in DB  (Proses Selesai, skip DB)
+    │
+    ▼
+If exists > 0:
+delete_document_chunks(document_id)
+(Hapus vektor/dokumen lama di DB)
+    │
+    ▼
+store_chunks_to_supabase(chunks)
+(Kirim ke OpenAI untuk Embedding,
+lalu simpan ke tabel `documents`
+di Supabase pgvector)
+    │
+    ▼
+Return "SUCCESS"
+```
+
+### Detail Tahapan Ekstraksi & Chunking (Data Preprocessing)
 
 ```
 1. [Input]        File PDF Peraturan Desa disediakan
@@ -418,14 +539,14 @@ Mode Opsional:
 
 ### Tabel Ringkasan Metrik Evaluasi
 
-| Metrik                  | Rentang | Input Wajib                              | Memerlukan Ground Truth Pakar | Keterangan Singkat                                          |
-| ----------------------- | ------- | ---------------------------------------- | ----------------------------- | ----------------------------------------------------------- |
-| **faithfulness**        | 0–1     | answer, contexts                         | ❌                            | Klaim di jawaban harus didukung konteks                     |
-| **answer_relevancy**    | 0–1     | question, answer                         | ❌                            | Jawaban harus relevan dan menjawab pertanyaan               |
-| **context_precision**   | 0–1     | question, contexts, ground_truth         | ⚠️ Sebaiknya ada              | Chunk relevan harus di ranking atas                         |
-| **context_recall**      | 0–1     | contexts, ground_truth                   | ✅ Wajib                      | Konteks harus mencakup info dari jawaban pakar              |
-| **noise_sensitivity**   | 0–1     | question, answer, contexts, ground_truth | ✅ Wajib                      | Rendah lebih baik: model tidak terpengaruh noise            |
-| **semantic_similarity** | 0–1     | answer, ground_truth                     | ✅ Wajib                      | Cosine similarity embedding: kesamaan makna jawaban vs pakar|
+| Metrik                  | Rentang | Input Wajib                              | Memerlukan Ground Truth Pakar | Keterangan Singkat                                           |
+| ----------------------- | ------- | ---------------------------------------- | ----------------------------- | ------------------------------------------------------------ |
+| **faithfulness**        | 0–1     | answer, contexts                         | ❌                            | Klaim di jawaban harus didukung konteks                      |
+| **answer_relevancy**    | 0–1     | question, answer                         | ❌                            | Jawaban harus relevan dan menjawab pertanyaan                |
+| **context_precision**   | 0–1     | question, contexts, ground_truth         | ⚠️ Sebaiknya ada              | Chunk relevan harus di ranking atas                          |
+| **context_recall**      | 0–1     | contexts, ground_truth                   | ✅ Wajib                      | Konteks harus mencakup info dari jawaban pakar               |
+| **noise_sensitivity**   | 0–1     | question, answer, contexts, ground_truth | ✅ Wajib                      | Rendah lebih baik: model tidak terpengaruh noise             |
+| **semantic_similarity** | 0–1     | answer, ground_truth                     | ✅ Wajib                      | Cosine similarity embedding: kesamaan makna jawaban vs pakar |
 
 ### Penanganan Kasus ground_truth Tidak Diberikan
 
@@ -442,12 +563,12 @@ Jika ground_truth = None pada request payload:
 
 ### Konfigurasi LLM Judge & Embedding (ragas_service.py)
 
-| Komponen              | Model                             | Parameter Kunci             | Tujuan                                |
-| --------------------- | --------------------------------- | --------------------------- | ------------------------------------- |
-| **LLM Judge (RAGAS)** | `openai/gpt-3.5-turbo-16k`       | `temperature=0.0`, max 2000 | Juri stabil & deterministik           |
-| **Embeddings (RAGAS)**| `openai/text-embedding-3-large`   | 1536 dimensi                | Representasi semantik untuk relevancy |
-| **SAS Embedder**      | `openai/text-embedding-3-large`   | Sama dengan RAGAS embedder  | Cosine similarity answer vs truth     |
-| **Wrapper**           | `LangchainLLMWrapper` + `LangchainEmbeddingsWrapper` | — | Standardisasi format JSON RAGAS |
+| Komponen               | Model                                                | Parameter Kunci             | Tujuan                                |
+| ---------------------- | ---------------------------------------------------- | --------------------------- | ------------------------------------- |
+| **LLM Judge (RAGAS)**  | `openai/gpt-3.5-turbo-16k`                           | `temperature=0.0`, max 2000 | Juri stabil & deterministik           |
+| **Embeddings (RAGAS)** | `openai/text-embedding-3-large`                      | 1536 dimensi                | Representasi semantik untuk relevancy |
+| **SAS Embedder**       | `openai/text-embedding-3-large`                      | Sama dengan RAGAS embedder  | Cosine similarity answer vs truth     |
+| **Wrapper**            | `LangchainLLMWrapper` + `LangchainEmbeddingsWrapper` | —                           | Standardisasi format JSON RAGAS       |
 
 ---
 
@@ -540,7 +661,10 @@ Jika ground_truth = None pada request payload:
 ```json
 {
   "instruction": "Apa fungsi BPD menurut peraturan desa ini?",
-  "documents": ["pasal 7\nkewenangan lokal...", "pasal 1\nbpd adalah lembaga..."],
+  "documents": [
+    "pasal 7\nkewenangan lokal...",
+    "pasal 1\nbpd adalah lembaga..."
+  ],
   "thought_process": "Pasal 1 relevan karena mendefinisikan BPD: <<badan permusyawaratan desa adalah lembaga yang melaksanakan fungsi pemerintahan>>. Pasal 7 membahas kewenangan, tidak relevan.",
   "completion": "BPD berfungsi sebagai lembaga pemerintahan desa yang anggotanya merupakan wakil penduduk berdasarkan keterwakilan wilayah.",
   "metadata_extra": {
@@ -559,31 +683,31 @@ Jika ground_truth = None pada request payload:
 
 ### Keputusan Desain Penting (V4)
 
-| Keputusan | Alasan |
-|---|---|
-| **Kutipan hanya di `thought_process`** | Completion yang natural lebih sesuai untuk fine-tuning model yang digunakan dalam percakapan nyata |
-| **`check_answerability()` sebelum distractor** | Mencegah pertanyaan yang tidak bisa dijawab masuk dataset; kualitas > kuantitas |
-| **`hard_negative` (0.75–0.95)** | Distractor yang sangat mirip secara semantik melatih model untuk membedakan dokumen yang hampir identik |
-| **`reasoning_based` menggantikan `interpretatif`** | Studi kasus what-if lebih menantang dan mencerminkan kebutuhan nyata dibanding pertanyaan "mengapa" |
-| **`pasal_lookup` bobot terbesar (20)** | Dataset didominasi pertanyaan lookup agar model terlatih menjawab pertanyaan pasal spesifik |
-| **MULTIHOP_RATIO diturunkan ke 10%** | Multi-hop terlalu sering menghasilkan konteks yang tidak koheren; 10% lebih realistis |
-| **Embedding Cache (`.pkl`)** | Embedding 500+ chunk memakan biaya API; cache mencegah re-embed setiap run |
-| **Oracle Hint `[INTERNAL]`** | LLM diberitahu posisi oracle via prompt internal yang tidak masuk ke output final |
-
+| Keputusan                                          | Alasan                                                                                                  |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Kutipan hanya di `thought_process`**             | Completion yang natural lebih sesuai untuk fine-tuning model yang digunakan dalam percakapan nyata      |
+| **`check_answerability()` sebelum distractor**     | Mencegah pertanyaan yang tidak bisa dijawab masuk dataset; kualitas > kuantitas                         |
+| **`hard_negative` (0.75–0.95)**                    | Distractor yang sangat mirip secara semantik melatih model untuk membedakan dokumen yang hampir identik |
+| **`reasoning_based` menggantikan `interpretatif`** | Studi kasus what-if lebih menantang dan mencerminkan kebutuhan nyata dibanding pertanyaan "mengapa"     |
+| **`pasal_lookup` bobot terbesar (20)**             | Dataset didominasi pertanyaan lookup agar model terlatih menjawab pertanyaan pasal spesifik             |
+| **MULTIHOP_RATIO diturunkan ke 10%**               | Multi-hop terlalu sering menghasilkan konteks yang tidak koheren; 10% lebih realistis                   |
+| **Embedding Cache (`.pkl`)**                       | Embedding 500+ chunk memakan biaya API; cache mencegah re-embed setiap run                              |
+| **Oracle Hint `[INTERNAL]`**                       | LLM diberitahu posisi oracle via prompt internal yang tidak masuk ke output final                       |
 
 # Key Features
 
 ### 1. 🔍 Multi-Stage RAG Pipeline
 
 Pipeline RAG yang berlapis dan sistematis: **Retrieval (k=20) → Re-ranking (k=5) → Adjacent Chunk Expansion → Generation**.
+
 - **Tahap 1 (Retrieval):** Mengambil 20 kandidat dokumen (chunk) teratas yang secara semantik mirip dengan pertanyaan.
 - **Tahap 2 (Re-ranking):** AI Cross-Encoder menilai ulang 20 kandidat tersebut secara ketat, lalu membuang 15 terbawah dan hanya menyisakan **5 pemenang (Top 5)**.
 - **Tahap 3 (Expansion):** Khusus untuk 5 pemenang ini, sistem menarik paragraf tetangganya (sebelum & sesudah) untuk melengkapi teks yang terpotong.
-Setiap tahap berfokus pada efisiensi dan akurasi, memastikan LLM hanya menerima konteks yang paling relevan namun utuh.
+  Setiap tahap berfokus pada efisiensi dan akurasi, memastikan LLM hanya menerima konteks yang paling relevan namun utuh.
 
-### 2. 📝 Legal Document-Aware Chunking
+### 2. 📝 Legal Document-Aware Chunking (Semantic & Recursive)
 
-Chunking tidak dilakukan dengan ukuran karakter biasa (fixed-size), melainkan dengan **memahami struktur hukum dokumen** (BAB → Pasal → Ayat → Butir). Setiap chunk merupakan satu unit logis peraturan yang atomic, sehingga retrieval lebih presisi dan jawaban dapat menyebut pasal secara spesifik.
+Chunking tidak dilakukan dengan ukuran karakter biasa (fixed-size), melainkan dengan **memahami struktur hukum dokumen** (BAB → Pasal → Ayat → Butir). Di dalam implementasi (meskipun di laporan TA disebutkan RecursiveCharacterTextSplitter), sistem menggunakan pendekatan hibrida *Semantic Legal-Aware Chunking* (_parse_perdes_sections). Setiap chunk merupakan satu unit logis peraturan yang atomic, sehingga retrieval lebih presisi dan jawaban dapat menyebut pasal secara spesifik.
 
 ### 3. 🔄 Query Rewriting untuk Follow-up Questions
 
@@ -600,6 +724,7 @@ Terintegrasi dengan model fine-tuned berbasis **RAFT (Retrieval-Augmented Fine-T
 ### 6. 📊 Automated RAGAS + Semantic Similarity Evaluation
 
 Evaluasi kualitas RAG dilakukan secara otomatis menggunakan dua komponen yang berjalan berurutan:
+
 - **RAGAS Framework** — menghitung 5 metrik berbasis LLM Judge (GPT-3.5-turbo): Faithfulness, Answer Relevancy, Context Precision, Context Recall, dan Noise Sensitivity.
 - **Semantic Answer Similarity (SAS)** — menghitung cosine similarity antara embedding `answer` dan `ground_truth` menggunakan `text-embedding-3-large`, menghasilkan skor kesamaan makna (0–1) yang tidak bergantung pada format atau tanda baca.
 
@@ -611,11 +736,12 @@ Sistem memiliki dua lapisan filter: **Off-Topic Filter** (berbasis keyword) meno
 
 ### 8. 📂 Smart Adjacent Chunk Expansion
 
-Sistem mengatasi masalah teks terpotong (akibat proses _chunking_ di awal) dengan fitur **Ekspansi Chunk Bertetangga**. Setelah proses _Re-ranking_ menghasilkan **5 chunk pemenang (Top 5)**, sistem secara otomatis kembali ke database untuk mengambil 1 chunk tepat **sebelum** dan 1 chunk tepat **sesudah** dari masing-masing pemenang tersebut. 
+Sistem mengatasi masalah teks terpotong (akibat proses _chunking_ di awal) dengan fitur **Ekspansi Chunk Bertetangga**. Setelah proses _Re-ranking_ menghasilkan **5 chunk pemenang (Top 5)**, sistem secara otomatis kembali ke database untuk mengambil 1 chunk tepat **sebelum** dan 1 chunk tepat **sesudah** dari masing-masing pemenang tersebut.
 
 Hasilnya, LLM tidak hanya membaca 1 potongan kecil teks, melainkan membaca **5 blok teks yang utuh**. Karena masing-masing dari 5 pemenang ini diekspansi menjadi 3 bagian, total teks yang disuapkan ke LLM setara dengan 15 chunk dokumen (5 blok × 3 chunk).
 
 **Visualisasi Output Tahapan ke LLM:**
+
 - **Blok 1 (Top 1 Re-ranking):** Berisi `[Konteks Sebelumnya]` + `[Bagian Utama]` + `[Konteks Berikutnya]`
 - **Blok 2 (Top 2 Re-ranking):** Berisi `[Konteks Sebelumnya]` + `[Bagian Utama]` + `[Konteks Berikutnya]`
 - **Blok 3 (Top 3 Re-ranking):** Berisi `[Konteks Sebelumnya]` + `[Bagian Utama]` + `[Konteks Berikutnya]`
@@ -623,6 +749,7 @@ Hasilnya, LLM tidak hanya membaca 1 potongan kecil teks, melainkan membaca **5 b
 - **Blok 5 (Top 5 Re-ranking):** Berisi `[Konteks Sebelumnya]` + `[Bagian Utama]` + `[Konteks Berikutnya]`
 
 **Contoh Bentuk Fisik 1 Blok Teks:**
+
 ```text
 [Sumber: Peraturan Desa Majasetra No. 1 Tahun 2018] [Desa: majasetra]
 
@@ -637,6 +764,7 @@ Dalam Peraturan Desa ini yang dimaksud dengan :
 [Konteks Berikutnya — pasal/butir selanjutnya]
 6. Pemerintahan Desa adalah penyelenggaraan urusan pemerintahan dan kepentingan masyarakat setempat...
 ```
+
 Dengan struktur seperti ini, pemahaman hierarki LLM menjadi sempurna dan mampu mengutip sumber dengan sangat spesifik.
 
 ### 9. 💬 Persistent Chat Session & History
@@ -655,12 +783,12 @@ Sistem menggunakan dua database yang terpisah berdasarkan fungsinya:
 
 ## PostgreSQL — Relasional (Data Transaksional)
 
-| Tabel               | Kolom Utama                                                                                                                                                                                                         | Peran                                                                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **`users`**         | `id`, `username`, `password`, `created_at`                                                                                                                                                                          | Menyimpan data autentikasi pengguna sistem                                                                                    |
-| **`chat_sessions`** | `id`, `user_id`, `session_name`, `evaluate`, `created_at`                                                                                                                                                           | Merepresentasikan satu sesi percakapan. Field `evaluate` (BOOLEAN) menentukan apakah evaluasi RAGAS aktif untuk sesi tersebut |
+| Tabel               | Kolom Utama                                                                                                                                                                                                            | Peran                                                                                                                                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`users`**         | `id`, `username`, `password`, `created_at`                                                                                                                                                                             | Menyimpan data autentikasi pengguna sistem                                                                                                                                                      |
+| **`chat_sessions`** | `id`, `user_id`, `session_name`, `evaluate`, `created_at`                                                                                                                                                              | Merepresentasikan satu sesi percakapan. Field `evaluate` (BOOLEAN) menentukan apakah evaluasi RAGAS aktif untuk sesi tersebut                                                                   |
 | **`chat_history`**  | `id`, `session_id`, `user_id`, `user_query`, `llm_response`, `metadata` (JSONB), `is_evaluated`, `faithfulness`, `answer_relevance`, `context_precision`, `context_recall`, `noise_sensitivity`, `semantic_similarity` | Menyimpan setiap pasang tanya-jawab beserta seluruh metrik evaluasi RAGAS + SAS dalam kolom bertipe FLOAT yang terstruktur. Kolom evaluasi bernilai NULL jika sesi tidak mengaktifkan evaluasi. |
-| **`chunks_perdes`** | `id`, `file_name`, `content`, `metadata` (JSONB), `created_at`                                                                                                                                                      | Tabel opsional untuk menyimpan hasil chunking dokumen di sisi PostgreSQL                                                      |
+| **`chunks_perdes`** | `id`, `file_name`, `content`, `metadata` (JSONB), `created_at`                                                                                                                                                         | Tabel opsional untuk menyimpan hasil chunking dokumen di sisi PostgreSQL                                                                                                                        |
 
 ## Supabase (PostgreSQL + pgvector) — Vector Store
 
@@ -676,17 +804,17 @@ Sistem menggunakan dua database yang terpisah berdasarkan fungsinya:
 
 ## REST API Endpoints (Flask)
 
-| Method     | Endpoint                            | Fungsi                                                                                         |
-| ---------- | ----------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `POST`     | `/api/chat`                         | Endpoint utama: menerima pertanyaan user, menjalankan pipeline RAG, dan mengembalikan jawaban  |
-| `POST`     | `/api/chat-sessions`                | Membuat sesi percakapan baru dengan opsi nama sesi dan flag evaluasi                           |
-| `GET`      | `/api/chat-sessions`                | Mengambil daftar semua sesi percakapan milik user                                              |
-| `GET`      | `/api/chat-history/<session_id>`    | Mengambil riwayat percakapan lengkap dari sesi tertentu                                        |
-| `PUT`      | `/api/chat-sessions/<session_id>`   | Memperbarui nama sesi atau status flag evaluasi RAGAS                                          |
-| `DELETE`   | `/api/chat-sessions/<session_id>`   | Menghapus sesi dan seluruh riwayat terkait (CASCADE)                                           |
-| `POST`     | `/api/generate-embedding`           | Memproses dan mengingesti file PDF ke vector store Supabase                                    |
-| `GET`      | `/api/models`                       | Mengambil informasi daftar model yang tersedia                                                 |
-| `GET`      | `/api/user/<id>`                    | Mengambil informasi data pengguna                                                              |
+| Method   | Endpoint                          | Fungsi                                                                                        |
+| -------- | --------------------------------- | --------------------------------------------------------------------------------------------- |
+| `POST`   | `/api/chat`                       | Endpoint utama: menerima pertanyaan user, menjalankan pipeline RAG, dan mengembalikan jawaban |
+| `POST`   | `/api/chat-sessions`              | Membuat sesi percakapan baru dengan opsi nama sesi dan flag evaluasi                          |
+| `GET`    | `/api/chat-sessions`              | Mengambil daftar semua sesi percakapan milik user                                             |
+| `GET`    | `/api/chat-history/<session_id>`  | Mengambil riwayat percakapan lengkap dari sesi tertentu                                       |
+| `PUT`    | `/api/chat-sessions/<session_id>` | Memperbarui nama sesi atau status flag evaluasi RAGAS                                         |
+| `DELETE` | `/api/chat-sessions/<session_id>` | Menghapus sesi dan seluruh riwayat terkait (CASCADE)                                          |
+| `POST`   | `/api/generate-embedding`         | Memproses dan mengingesti file PDF ke vector store Supabase                                   |
+| `GET`    | `/api/models`                     | Mengambil informasi daftar model yang tersedia                                                |
+| `GET`    | `/api/user/<id>`                  | Mengambil informasi data pengguna                                                             |
 
 ## External Service Integrations
 
@@ -768,6 +896,6 @@ Seluruh komponen backend pada proyek ini dirancang, diimplementasikan, dan dikel
 
 - **Database Schema Design:** Merancang schema PostgreSQL yang mencakup manajemen user, sesi percakapan, riwayat chat, dan skema evaluasi metrik RAGAS yang efisien, serta SQL function `match_documents` kustom untuk vector similarity search di Supabase.
 
-- **RAFT Dataset Generation:** Merancang dan menjalankan pipeline pembuatan dataset RAFT v4 (`raft_dataset_v4_production.jsonl`) dari dokumen peraturan desa untuk keperluan fine-tuning model. Pipeline mencakup embedding cache, answerability check, 4 jenis distractor (normal, hard_negative, near_miss, completely_absent), quality gate `is_bad_sample()`, dan format sampel dengan _thought process_ + _natural completion_ yang terpisah.
+- **RAFT Dataset Generation:** Merancang dan menjalankan pipeline pembuatan dataset RAFT v4 (`raft_dataset_v4_production.jsonl`) dari dokumen peraturan desa untuk keperluan fine-tuning model. Pipeline mencakup embedding cache, answerability check, 4 jenis distractor (normal, hard*negative, near_miss, completely_absent), quality gate `is_bad_sample()`, dan format sampel dengan \_thought process* + _natural completion_ yang terpisah.
 
 ---

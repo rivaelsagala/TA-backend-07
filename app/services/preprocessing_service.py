@@ -287,7 +287,7 @@ def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
     except Exception as e:
         logger.warning(f"Gagal mengekstrak metadata perdes: {e}")
     
-    document_id = f"perdes_{village_name}_{perdes_number}_{perdes_year}"
+    document_id = f"perdes_dis{village_name}_{perdes_number}_{perdes_year}"
     document_title = f"Peraturan Desa {village_name.title()} No. {perdes_number} Tahun {perdes_year} - {perdes_title.title()}"
     
     return {
@@ -354,7 +354,7 @@ def extract_text_from_pdf(file_path: str):
     
     enriched_text = f"{context_header}\n\n{clean_text}"
     
-    raw_output_dir = os.path.join(os.getcwd(), 'data', 'processed')
+    raw_output_dir = os.path.join(os.getcwd(), 'data', 'processed', "distraktor")
     os.makedirs(raw_output_dir, exist_ok=True)
     canonical_base = _canonical_output_basename(file_path)
     raw_path = os.path.join(raw_output_dir, f"{canonical_base}_raw.txt")
@@ -679,7 +679,7 @@ def chunk_documents(documents: list):
     return all_chunks
 
 def save_results_to_folder(file_path: str, extracted_docs: list, chunks: list):
-    output_dir = os.path.join(os.getcwd(), 'data', 'processed')
+    output_dir = os.path.join(os.getcwd(), 'data', 'processed' , "distraktor")
     os.makedirs(output_dir, exist_ok=True)
 
     canonical_base = _canonical_output_basename(file_path)
@@ -763,58 +763,6 @@ def save_chunks_to_postgres(chunks: list) -> bool:
         if cursor is not None: cursor.close()
         if conn is not None: conn.close()
 
-# def export_finetune_dataset(chunks: list, file_path: str) -> str:
-#     output_dir = os.path.join(os.getcwd(), 'data', 'dataset')
-#     os.makedirs(output_dir, exist_ok=True)
-    
-#     canonical_base = _canonical_output_basename(file_path)
-#     jsonl_path = os.path.join(output_dir, f"{canonical_base}_finetune.jsonl")
-    
-#     finetune_entries = []
-#     for chunk in chunks:
-#         content = chunk.page_content
-#         metadata = chunk.metadata
-        
-#         context_header = ""
-#         butir_content = content
-#         header_match = re.match(
-#             r'(\[dokumen:.*?\]\s*\[desa:.*?\]\s*\[kabupaten:.*?\]\s*\[nomor:.*?\])',
-#             content
-#         )
-#         if header_match:
-#             context_header = header_match.group(1)
-#             butir_content = content[header_match.end():].strip()
-        
-#         doc_title = metadata.get("title", "Unknown")
-#         system_content = (
-#             f"Anda adalah asisten hukum pemerintahan desa. "
-#             f"Jawab pertanyaan berdasarkan konteks dokumen yang diberikan.\n\n"
-#             f"KONTEKS DOKUMEN:\n"
-#             f"{context_header}\n\n{butir_content}"
-#         )
-        
-#         pasal = metadata.get("section", "")
-#         ayat_num = metadata.get("ayat", "")
-        
-#         if ayat_num:
-#             user_question = f"Apa isi {pasal} ayat {ayat_num} dalam {doc_title}?"
-#             assistant_answer = f"Berdasarkan {doc_title}, {pasal} ayat {ayat_num} mengatur bahwa:\n\n{butir_content}"
-#         else:
-#             user_question = f"Apa isi {pasal} dalam {doc_title}?"
-#             assistant_answer = f"Berdasarkan {doc_title}, {pasal} mengatur bahwa:\n\n{butir_content}"
-        
-#         finetune_entries.append({
-#             "messages": [
-#                 {"role": "system", "content": system_content},
-#                 {"role": "user", "content": user_question},
-#                 {"role": "assistant", "content": assistant_answer}
-#             ]
-#         })
-    
-#     with open(jsonl_path, 'w', encoding='utf-8') as f:
-#         for entry in finetune_entries:
-#             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
-#     return jsonl_path
 
 def extract_and_chunk_pdf(file_path: str, save_to_db: bool = True):
     documents = extract_text_from_pdf(file_path)

@@ -245,19 +245,25 @@ class RagasEvaluationService:
             if ground_truth is None:
                 logger.warning(
                     "'ground_truth' tidak diberikan. "
-                    "Metrik context_recall, context_entity_recall, dan noise_sensitivity "
-                    "tidak akan akurat karena menggunakan jawaban LLM sebagai ground truth. "
-                    "Untuk pengujian valid, berikan jawaban pakar sebagai ground_truth."
+                    "Metrik context_precision, context_recall, dan noise_sensitivity "
+                    "akan dilewati karena membutuhkan referensi jawaban pakar."
                 )
-                ground_truth = answer
-            
-            # Siapkan dataset untuk evaluasi
-            data_sample = {
-                "question": [question],
-                "contexts": [contexts],
-                "answer": [answer],
-                "ground_truth": [ground_truth]
-            }
+                metrics_to_run = [faithfulness, answer_relevancy]
+                # Dataset tanpa ground_truth
+                data_sample = {
+                    "question": [question],
+                    "contexts": [contexts],
+                    "answer": [answer]
+                }
+            else:
+                metrics_to_run = self.metrics
+                # Dataset lengkap dengan ground_truth
+                data_sample = {
+                    "question": [question],
+                    "contexts": [contexts],
+                    "answer": [answer],
+                    "ground_truth": [ground_truth]
+                }
             
             eval_dataset = Dataset.from_dict(data_sample)
             
@@ -266,7 +272,7 @@ class RagasEvaluationService:
             # Jalankan evaluasi
             evaluation_result = evaluate(
                 dataset=eval_dataset,
-                metrics=self.metrics,
+                metrics=metrics_to_run,
                 llm=self.custom_llm,
                 embeddings=self.custom_embeddings
             )
@@ -276,20 +282,28 @@ class RagasEvaluationService:
             result_dict = df_results.iloc[0].to_dict()
             
             # Format hasil RAGAS
+            def get_metric_val(key):
+                val = result_dict.get(key)
+                if val is None or (isinstance(val, float) and np.isnan(val)):
+                    return None
+                return float(val)
+
             formatted_result = {
-                "faithfulness": float(result_dict.get("faithfulness", 0)),
-                "answer_relevancy": float(result_dict.get("answer_relevancy", 0)),
-                "context_precision": float(result_dict.get("context_precision", 0)),
-                "context_recall": float(result_dict.get("context_recall", 0)),
-                # "context_entity_recall": float(result_dict.get("context_entity_recall", 0)),
-                "noise_sensitivity": float(result_dict.get("noise_sensitivity", 0)),
+                "faithfulness": get_metric_val("faithfulness"),
+                "answer_relevancy": get_metric_val("answer_relevancy"),
+                "context_precision": get_metric_val("context_precision"),
+                "context_recall": get_metric_val("context_recall"),
+                "noise_sensitivity": get_metric_val("noise_sensitivity"),
             }
 
-            # Hitung Semantic Answer Similarity (SAS) — kesamaan makna answer vs ground_truth
-            # SAS hanya bermakna jika ground_truth adalah jawaban pakar (bukan fallback LLM)
-            sas_score = sas_service.compute_sas(answer, ground_truth)
-            formatted_result["semantic_similarity"] = sas_score
-            logger.debug(f"SAS (answer vs ground_truth): {sas_score}")
+            # Hitung Semantic Answer Similarity (SAS)
+            if ground_truth is not None:
+                sas_score = sas_service.compute_sas(answer, ground_truth)
+                formatted_result["semantic_similarity"] = sas_score
+                logger.debug(f"SAS (answer vs ground_truth): {sas_score}")
+            else:
+                formatted_result["semantic_similarity"] = None
+                logger.debug("SAS skipped because ground_truth is not provided.")
             
             # Rata-rata dari seluruh metrik
             # formatted_result["average_score"] = round(
