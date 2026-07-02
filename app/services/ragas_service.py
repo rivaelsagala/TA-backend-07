@@ -14,7 +14,7 @@ from ragas.metrics import (
     context_precision,
     context_recall,
     # context_entity_recall,
-    NoiseSensitivity
+    # NoiseSensitivity  # dimatikan — terlalu lambat (banyak LLM call)
 )
 from dotenv import load_dotenv
 
@@ -188,9 +188,9 @@ class RagasEvaluationService:
         langchain_llm = ChatOpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
-            model="openai/gpt-3.5-turbo-16k",
+            model="openai/gpt-4o-mini",   # lebih cepat dari gpt-3.5-turbo-16k
             temperature=0.0,
-            max_tokens = 2000
+            max_tokens=2000
         )
         
         # 2. Inisialisasi Embeddings Langchain
@@ -204,17 +204,14 @@ class RagasEvaluationService:
         self.custom_llm = LangchainLLMWrapper(langchain_llm)
         self.custom_embeddings = LangchainEmbeddingsWrapper(langchain_embeddings)
         
-        # Inisialisasi NoiseSensitivity
-        self.noise_sensitivity = NoiseSensitivity()
-        
         # Metrik yang akan digunakan
+        # NoiseSensitivity dimatikan — terlalu lambat (banyak LLM call per sampel)
         self.metrics = [
-            faithfulness,           # Apakah jawaban didukung oleh konteks?
-            answer_relevancy,       # Apakah jawaban relevan dengan pertanyaan?
-            context_precision,      # Apakah konteks relevan dan presisi? (butuh ground_truth)
-            context_recall,         # Apakah konteks mencakup info di ground truth? (butuh ground_truth)
-            # context_entity_recall,  # Apakah entitas penting dari ground truth ada di konteks? (butuh ground_truth)
-            self.noise_sensitivity  # Seberapa sensitif model terhadap noise? (butuh ground_truth)
+            faithfulness,        # Apakah jawaban didukung oleh konteks?
+            answer_relevancy,    # Apakah jawaban relevan dengan pertanyaan?
+            context_precision,   # Apakah konteks relevan dan presisi? (butuh ground_truth)
+            context_recall,      # Apakah konteks mencakup info di ground truth? (butuh ground_truth)
+            # NoiseSensitivity  # dimatikan sementara
         ]
         
         logger.info("RAGAS Evaluation Service initialized with wrappers")
@@ -289,11 +286,11 @@ class RagasEvaluationService:
                 return float(val)
 
             formatted_result = {
-                "faithfulness": get_metric_val("faithfulness"),
-                "answer_relevancy": get_metric_val("answer_relevancy"),
+                "faithfulness":      get_metric_val("faithfulness"),
+                "answer_relevancy":  get_metric_val("answer_relevancy"),
                 "context_precision": get_metric_val("context_precision"),
-                "context_recall": get_metric_val("context_recall"),
-                "noise_sensitivity": get_metric_val("noise_sensitivity"),
+                "context_recall":    get_metric_val("context_recall"),
+                # "noise_sensitivity": None,   # dimatikan sementara
             }
 
             # Hitung Semantic Answer Similarity (SAS)
@@ -317,12 +314,11 @@ class RagasEvaluationService:
             logger.error(f"Error during RAGAS evaluation: {str(e)}")
             return {
                 "error": str(e),
-                "faithfulness": 0,
-                "answer_relevancy": 0,
+                "faithfulness":      0,
+                "answer_relevancy":  0,
                 "context_precision": 0,
-                "context_recall": 0,
-                # "context_entity_recall": 0,
-                "noise_sensitivity": 0,
+                "context_recall":    0,
+                # "noise_sensitivity": None,
                 "semantic_similarity": 0,
             }
     
