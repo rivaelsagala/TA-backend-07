@@ -1,0 +1,90 @@
+[
+  {
+    "model_label": "LLaMA Base",
+    "model_id": 1,
+    "results": [
+      {
+        "no": 1,
+        "model_label": "LLaMA Base",
+        "model_id": 1,
+        "question": "Siapa saja unsur masyarakat yang diundang dan harus hadir dalam Musyawarah Desa pemilihan kewenangan di Desa Majasetra berdasarkan Pasal 12 Peraturan Desa Majasetra Nomor 1 Tahun 2018?",
+        "ground_truth": "Berdasarkan Pasal 12 ayat (2) Peraturan Desa Majasetra Nomor 1 Tahun 2018, unsur masyarakat yang dimaksud terdiri dari: a. tokoh agama; b. tokoh seni dan budaya; c. tokoh masyarakat dan pemuda; d. tokoh pendidik; e. perwakilan kelompok tani; f. perwakilan kelompok perajin; g. perwakilan kelompok perempuan; h. perwakilan kelompok pemerhati dan perlindungan anak; dan i. perwakilan kelompok masyarakat miskin.",
+        "answer": "Berdasarkan Pasal 12 Peraturan Desa Majasetra Nomor 1 Tahun 2018, unsur masyarakat yang diundang dan harus hadir dalam Musyawarah Desa pemilihan kewenangan di Desa Majasetra adalah:\n\n1. Pemerintah Desa\n2. Lembaga Kemasyarakatan Desa\n3. Unsur masyarakat yang terdiri dari:\n * Perwakilan perangkat desa (Pasal 12 ayat 2 huruf a)\n * Anggota Badan Permusyawaratan Desa (BPD) (Pasal 12 ayat 2 huruf b)\n * Perwakilan kecamatan (Pasal 12 ayat 2 huruf c)\n * Perwakilan pengusaha lokal (Pasal 12 ayat 2 huruf d)\n * Ketua Rukun Warga (RW) (Pasal 12 ayat 2 huruf e)\n\nNamun, perlu diingat bahwa Pasal 12 ayat 1 juga menyebutkan bahwa pemilihan kewenangan desa dilakukan dalam forum musyawarah desa yang diselenggarakan oleh BPD dan dihadiri oleh pemerintah desa, lembaga kemasyarakatan desa, dan unsur masyarakat.",
+        "ragas": {
+          "faithfulness": 0.4166666666666667,
+          "answer_relevancy": 0.7403420099399846,
+          "context_recall": 1.0,
+          "context_precision": 0.6999999999766667,
+          "sas": null,
+          "noise_sensitivity": null
+        },
+        "latency_s": 83.16,
+        "status": "OK",
+        "error": null
+      },
+      {
+        "no": 2,
+        "model_label": "LLaMA Base",
+        "model_id": 1,
+        "question": "Berdasarkan Peraturan Desa Majasetra Nomor 1 Tahun 2018, siapa yang menyelenggarakan Musyawarah Desa dalam rangka pemilihan kewenangan desa dan siapa saja pihak yang harus hadir?",
+        "ground_truth": "Berdasarkan Pasal 12 ayat (1) Peraturan Desa Majasetra Nomor 1 Tahun 2018, Musyawarah Desa diselenggarakan oleh BPD dan dihadiri oleh pemerintah desa, lembaga kemasyarakatan desa, dan unsur masyarakat.",
+        "answer": "Berdasarkan Peraturan Desa Majasetra Nomor 1 Tahun 2018, pasal 12 ayat (1) menyebutkan bahwa Musyawarah Desa dalam rangka pemilihan kewenangan desa diselenggarakan oleh Badan Permusyawaratan Desa (BPD).\n\nSelain itu, pasal 12 ayat (1) juga menyebutkan bahwa Musyawarah Desa harus dihadiri oleh:\n\n1. Pemerintah Desa\n2. Lembaga Kemasyarakatan Desa\n3. Unsur Masyarakat\n\nNamun, perlu diingat bahwa pasal 12 ayat (2) juga menyebutkan bahwa Musyawarah Desa dapat melibatkan unsur masyarakat lain sesuai dengan kondisi sosial budaya masyarakat.",
+        "ragas": {
+          "faithfulness": 1.0,
+          "answer_relevancy": 0.7797097338953761,
+          "context_recall": 1.0,
+          "context_precision": 0.99999999998,
+          "sas": null,
+          "noise_sensitivity": null
+        },
+        "latency_s": 86.14,
+        "status": "OK",
+        "error": null
+      }
+    ]
+  },
+  {
+    "model_label": "LLaMA RAFT",
+    "model_id": 8,
+    "results": [
+      {
+        "no": 1,
+        "model_label": "LLaMA RAFT",
+        "model_id": 8,
+        "question": "Siapa saja unsur masyarakat yang diundang dan harus hadir dalam Musyawarah Desa pemilihan kewenangan di Desa Majasetra berdasarkan Pasal 12 Peraturan Desa Majasetra Nomor 1 Tahun 2018?",
+        "ground_truth": "Berdasarkan Pasal 12 ayat (2) Peraturan Desa Majasetra Nomor 1 Tahun 2018, unsur masyarakat yang dimaksud terdiri dari: a. tokoh agama; b. tokoh seni dan budaya; c. tokoh masyarakat dan pemuda; d. tokoh pendidik; e. perwakilan kelompok tani; f. perwakilan kelompok perajin; g. perwakilan kelompok perempuan; h. perwakilan kelompok pemerhati dan perlindungan anak; dan i. perwakilan kelompok masyarakat miskin.",
+        "answer": "Jenis unsur masyarakat yang diundang mencakup berbagai perwakilan dan tokoh dari berbagai bidang seperti politik, sosial, ekonomi, serta budaya. Hal ini bertujuan untuk memastikan adanya representasi dari berbagai lapisan masyarakat agar setiap kepentingan dapat terwakili dalam musyawarah tersebut.",
+        "ragas": {
+          "faithfulness": 0.25,
+          "answer_relevancy": 0.5938428490742701,
+          "context_recall": 1.0,
+          "context_precision": 0.6999999999766667,
+          "sas": null,
+          "noise_sensitivity": null
+        },
+        "latency_s": 124.83,
+        "status": "OK",
+        "error": null
+      },
+      {
+        "no": 2,
+        "model_label": "LLaMA RAFT",
+        "model_id": 8,
+        "question": "Berdasarkan Peraturan Desa Majasetra Nomor 1 Tahun 2018, siapa yang menyelenggarakan Musyawarah Desa dalam rangka pemilihan kewenangan desa dan siapa saja pihak yang harus hadir?",
+        "ground_truth": "Berdasarkan Pasal 12 ayat (1) Peraturan Desa Majasetra Nomor 1 Tahun 2018, Musyawarah Desa diselenggarakan oleh BPD dan dihadiri oleh pemerintah desa, lembaga kemasyarakatan desa, dan unsur masyarakat.",
+        "answer": "Maka dari itu, Musyawarah Desa dalam rangka pemilihan kewenangan desa diselenggarakan oleh Badan Permusyawaratan Desa (BPD). Sementara itu, acara ini dihadiri oleh beberapa pihak yaitu: pemerintah desa, lembaga kemasyarakatan desa, serta unsur masyarakat umumnya. Ketuaan ini bertujuan agar setiap elemen komunitas bisa berkontribusi dan terlibat dalam perencanaan serta pelaksanaan program-program pembangunan yang lebih baik bagi warga desa Majasetra.",
+        "ragas": {
+          "faithfulness": 0.5555555555555556,
+          "answer_relevancy": 0.4952021682781795,
+          "context_recall": 1.0,
+          "context_precision": 0.99999999998,
+          "sas": null,
+          "noise_sensitivity": null
+        },
+        "latency_s": 86.96,
+        "status": "OK",
+        "error": null
+      }
+    ]
+  }
+]

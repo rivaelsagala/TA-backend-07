@@ -46,20 +46,6 @@ INITIAL_K = 10   # Jumlah dokumen awal dari vector search
 FINAL_K = 5      # Jumlah dokumen final setelah re-ranking
 CONFIDENCE_THRESHOLD = -5.0  # Jika top_score di bawah ini, dokumen dianggap tidak relevan dan di-skip
 
-# Daftar document_id yang di-filter / tidak diambil saat retrieval (sebagai distraktor)
-EXCLUDED_DOCUMENT_IDS = [
-    "perdes_dis_mekarrahayu_05_2016",
-    "perdes_dis_padamukti_2_2018",
-    "perdes_disbiru_07_2015",
-    "perdes_disbiru_10_2016",
-    "perdes_disbiru_6_2015",
-    "perdes_discigentur kecamatan paseh kabupaten bandung_8_2018",
-    "perdes_discikadut_03_2017",
-    "perdes_discipedes kecamatan paseh kabupaten bandung_03_2018",
-    "perdes_discipedes_04_2018",
-    "perdes_dismajasetra_1_2018"
-]
-
 # Output
 DATASET_DIR = PROJECT_ROOT / "data" / "dataset"
 DATASET_DIR.mkdir(parents=True, exist_ok=True)
@@ -98,8 +84,7 @@ print("Cross-Encoder berhasil dimuat!")
 # ─────────────────────────────────────────────────────────────────────────────
 # Tambahkan pertanyaan di sini. Setiap pertanyaan akan di-retrieve secara real
 # melalui pipeline RAG (Vector DB → Top-20 → Reranking → Top-5).
-# Pengaturan Batasan Jumlah Pertanyaan
-MAX_QUESTIONS: int = None  # Set ke None jika ingin memproses semua pertanyaan (misal: MAX_QUESTIONS = None)
+# Pengaturan Batasan Jumlah Pertanyaan dihapus agar hanya menggunakan daftar di bawah ini
 
 QUESTIONS: List[str] = [
     # ── Contoh pertanyaan — ganti/tambah sesuai kebutuhan ──
@@ -137,6 +122,7 @@ Tugas
 Buat satu data RAFT yang terdiri dari:
 
 instruction
+documents
 thought_process
 completion
 
@@ -145,6 +131,16 @@ Instruction
 Gunakan pertanyaan yang diberikan.
 
 Jangan mengubah isi pertanyaan.
+
+Documents
+
+Gunakan seluruh Top-5 Documents sebagaimana diberikan.
+
+Jangan mengubah isi dokumen.
+
+Jangan menghapus dokumen.
+
+Jangan menambahkan dokumen.
 
 Thought Process
 
@@ -207,6 +203,13 @@ Format yang harus dihasilkan adalah:
 
 {
   "instruction": "<question>",
+  "documents": [
+    "<document 1>",
+    "<document 2>",
+    "<document 3>",
+    "<document 4>",
+    "<document 5>"
+  ],
   "thought_process": {
     "document_analysis": [
       {
@@ -289,18 +292,9 @@ def retrieve_top5_documents(question: str) -> Optional[List[str]]:
             query_name="match_documents"
         )
         
-        # 2. Vector Search — Mengambil lebih banyak untuk mengantisipasi filtering
-        raw_initial_docs = vector_store.similarity_search(question, k=INITIAL_K + len(EXCLUDED_DOCUMENT_IDS))
+        # 2. Vector Search — Top-20
+        initial_docs = vector_store.similarity_search(question, k=INITIAL_K)
         
-        # Filter out excluded document IDs
-        initial_docs = []
-        for doc in raw_initial_docs:
-            doc_id = doc.metadata.get("document_id", "")
-            if doc_id not in EXCLUDED_DOCUMENT_IDS:
-                initial_docs.append(doc)
-            if len(initial_docs) == INITIAL_K:
-                break
-                
         if not initial_docs:
             print(f"  [WARN] Vector search tidak menemukan dokumen untuk: \"{question[:60]}...\"")
             return None
@@ -419,10 +413,15 @@ def parse_raft_json(raw_response: str) -> Optional[Dict]:
 
 def validate_raft_structure(data: Dict) -> bool:
     """Validasi bahwa JSON memiliki struktur RAFT yang benar."""
-    required_keys = {"instruction", "thought_process", "completion"}
+    required_keys = {"instruction", "documents", "thought_process", "completion"}
     if not required_keys.issubset(data.keys()):
         missing = required_keys - set(data.keys())
         print(f"  [WARN] Missing keys: {missing}")
+        return False
+    
+    # Validasi documents adalah list
+    if not isinstance(data["documents"], list):
+        print("  [WARN] 'documents' bukan list")
         return False
     
     # Validasi thought_process memiliki document_analysis dan summary
@@ -484,15 +483,8 @@ def generate_single_raft_entry(question: str, documents: List[str], max_attempts
         
         parsed = parse_raft_json(raw)
         if parsed:
-            # Sisipkan documents langsung dari hasil retrieval
-            final_parsed = {
-                "instruction": parsed.get("instruction", question),
-                "documents": documents,
-                "thought_process": parsed.get("thought_process", {}),
-                "completion": parsed.get("completion", "")
-            }
             print("[VALID] JSON valid!")
-            return final_parsed
+            return parsed
         else:
             print("[INVALID] JSON tidak valid, retry...")
             time.sleep(REQUEST_DELAY)
@@ -604,59 +596,12 @@ def run_raft_pipeline(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# UTILITY: Load pertanyaan dari file
-# ─────────────────────────────────────────────────────────────────────────────
-
-def load_questions_from_file(filepath: Path) -> List[str]:
-    """
-    Load pertanyaan dari file teks (satu pertanyaan per baris).
-    Mengabaikan baris kosong dan baris yang dimulai dengan #.
-    """
-    questions = []
-    with open(filepath, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#"):
-                questions.append(line)
-    return questions
-
-def load_questions_from_jsonl(filepath: Path) -> List[str]:
-    """
-    Load pertanyaan (instruction) dari dataset JSONL yang sudah ada.
-    """
-    questions = []
-    with open(filepath, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                data = json.loads(line)
-                if "instruction" in data:
-                    questions.append(data["instruction"].strip())
-            except json.JSONDecodeError:
-                continue
-    return questions
-
-# ─────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Load pertanyaan dari dataset lama (finalv1)
-    dataset_lama = DATASET_DIR / "raft_dataset_finalv1.jsonl"
-    
-    if dataset_lama.exists():
-        questions_to_process = load_questions_from_jsonl(dataset_lama)
-        print(f"Loaded {len(questions_to_process)} pertanyaan dari {dataset_lama.name}")
-    else:
-        print(f"File {dataset_lama} tidak ditemukan, menggunakan QUESTIONS default.")
-        questions_to_process = QUESTIONS
-        
-    # Batasi jumlah pertanyaan yang diproses jika MAX_QUESTIONS di-set
-    if MAX_QUESTIONS is not None:
-        questions_to_process = questions_to_process[:MAX_QUESTIONS]
-        print(f"Membatasi pemrosesan hanya untuk {MAX_QUESTIONS} pertanyaan pertama.")
+    # Hanya memproses pertanyaan dari list QUESTIONS di atas
+    questions_to_process = QUESTIONS
     
     # Output file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

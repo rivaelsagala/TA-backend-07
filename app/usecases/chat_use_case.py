@@ -128,9 +128,19 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             rag_result = {"answer": answer, "sources": [], "model_used": "OffTopicFilter"}
 
         else:
-            # Ambil riwayat percakapan terakhir agar LLM paham konteks follow-up
-            recent_history = _get_recent_history(session_id)
-            logger.info(f"Sending {len(recent_history)} history messages to RAG for context")
+            # [NONAKTIF] Pengambilan history dari DB dimatikan sementara
+            # karena koneksi ke PostgreSQL remote (Render) sering timeout.
+            # Aktifkan kembali dengan menghapus komentar di bawah ini:
+            # -----------------------------------------------------------
+            # if evaluate:
+            #     recent_history = []
+            #     logger.info("Bypassing DB chat history (evaluate=True)")
+            # else:
+            #     recent_history = _get_recent_history(session_id)
+            #     logger.info(f"Sending {len(recent_history)} history messages to RAG")
+            # -----------------------------------------------------------
+            recent_history = []
+            logger.info("[SKIP] DB chat history dinonaktifkan (cegah connection timeout PostgreSQL remote)")
             
             rag_result = get_answer_from_rag(
                 user_question,
@@ -175,24 +185,34 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             "analysis": rag_result.get("analysis")  # RAFT thought_process
         }
         
-        # QA Note: evaluation_result tidak perlu lagi di-dump mentah ke metadata 
-        # karena sekarang sudah masuk ke dalam schema kolom yang memiliki tipe data spesifik (FLOAT).
-        
-        chat_service.save_chat_message(
-            session_id=session_id, 
-            user_id=user_id, 
-            user_query=user_question, 
-            llm_response=rag_result["answer"], 
-            metadata=metadata,
-            evaluation=evaluation_result,   
-        )
+        # ── SEMENTARA DIMATIKAN untuk mempercepat evaluasi batch RAGAS ──────────
+        # Aktifkan kembali setelah evaluasi selesai dengan menghapus komentar di bawah
+        # chat_service.save_chat_message(
+        #     session_id=session_id,
+        #     user_id=user_id,
+        #     user_query=user_question,
+        #     llm_response=rag_result["answer"],
+        #     metadata=metadata,
+        #     evaluation=evaluation_result,
+        # )
+        logger.info("[SKIP] save_chat_message dimatikan sementara (mode evaluasi batch)")
         
         # # Remove metadata from sources for cleaner API response
         # cleaned_sources = [{"content": src.get("content")} if isinstance(src, dict) else src for src in sources]
 
 
-        # Sertakan metadata beserta content di dalam sources untuk API response
-        cleaned_sources = [{"content": src.get("content"), "metadata": src.get("metadata")} if isinstance(src, dict) else src for src in sources]
+        # Sertakan metadata, expanded_content, dan neighbor_chunks beserta content di dalam sources untuk API response
+        cleaned_sources = []
+        for src in sources:
+            if isinstance(src, dict):
+                src_data = {"content": src.get("content"), "metadata": src.get("metadata")}
+                if "expanded_content" in src:
+                    src_data["expanded_content"] = src["expanded_content"]
+                if "neighbor_chunks" in src:
+                    src_data["neighbor_chunks"] = src["neighbor_chunks"]
+                cleaned_sources.append(src_data)
+            else:
+                cleaned_sources.append(src)
 
         # Build response
         response_body = {
