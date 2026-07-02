@@ -1,6 +1,7 @@
 import os
 import time
 import requests
+import re
 from typing import Optional, Dict, Any, List
 from loguru import logger
 from supabase import create_client, Client
@@ -523,13 +524,14 @@ def fetch_adjacent_chunks(
             max_idx = max(indices_for_doc)
             
             # Query: ambil range chunk dari dokumen ini dalam 1 query
+            # Menggunakan .in_() dengan list string agar terhindar dari bug komparasi lexicographical (misal "10" < "9")
+            idx_strings = [str(i) for i in range(min_idx, max_idx + 1)]
             result = (
                 supabase
                 .table(table_name)
                 .select("content, metadata")
                 .eq("metadata->>document_id", doc_id)
-                .gte("metadata->>chunk_index", str(min_idx))
-                .lte("metadata->>chunk_index", str(max_idx))
+                .in_("metadata->>chunk_index", idx_strings)
                 .execute()
             )
             
@@ -702,12 +704,18 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     is_raft = model_info.get("type") == "raft"
     
     # ==========================================
-    # TAHAP 3: ADJACENT CHUNK EXPANSION (skip untuk RAFT)
+    # TAHAP 3: ADJACENT CHUNK EXPANSION
     # ==========================================
+    # if not is_raft:
+    #     logger.info("Tahap 3: Adjacent Chunk Expansion (window=3)...")
+    #     adjacent_map = fetch_adjacent_chunks(reranked_docs, window=3)
+    # else:
+    #     logger.info("Tahap 3: Skip Adjacent Chunk Expansion for RAFT model...")
+    #     adjacent_map = {}
+    
+    # DISABLED TEMPORARILY PER USER REQUEST
+    logger.info("Tahap 3: Adjacent Chunk Expansion dinonaktifkan sementara...")
     adjacent_map = {}
-    if not is_raft:
-        logger.info("Tahap 3: Adjacent Chunk Expansion dinonaktifkan (dikomen).")
-        # adjacent_map = fetch_adjacent_chunks(reranked_docs, window=1)
         
     t1_retrieval = time.time()
     retrieval_time = t1_retrieval - t0_retrieval
@@ -718,14 +726,48 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     sources = []
     for doc in reranked_docs:
         metadata = doc.metadata
+        
+        # Ambil neighbor chunks untuk ditampilkan di response
+        doc_id = metadata.get("document_id")
+        chunk_idx = metadata.get("chunk_index")
+        map_key = (doc_id, int(chunk_idx)) if doc_id and chunk_idx is not None else None
+        adj = adjacent_map.get(map_key) if map_key else None
+        
         if not is_raft:
             context_block = _build_expanded_context_block(doc, adjacent_map)
             context_texts.append(context_block)
-        #     sources.append({"content": context_block, "metadata": metadata})
-        # else:
-        #     sources.append({"content": doc.page_content, "metadata": metadata})
-        raw_doc_chunks.append(doc.page_content)
-        sources.append({"content": doc.page_content, "metadata": metadata})
+
+            sources.append({
+                "content": doc.page_content,
+                "expanded_content": context_block,
+                "neighbor_chunks": {
+                    "before": adj["before"] if adj else [],
+                    "after": adj["after"] if adj else [],
+                },
+                "metadata": {
+                    "chunk_index": metadata.get("chunk_index"),
+                    "document_id": metadata.get("document_id")
+                }
+            })
+            raw_doc_chunks.append(doc.page_content)
+        else:
+            # RAFT: Tidak ada penambahan adjacent chunk
+            # Bersihkan metadata header [dokumen: ...] dari konten murni untuk RAFT
+            cleaned_content = re.sub(r'^(\[[^\]]+\]\s*)+\n*', '', doc.page_content, flags=re.IGNORECASE).strip()
+            
+            sources.append({
+                "content": doc.page_content,
+                "expanded_content": doc.page_content,
+                "neighbor_chunks": {
+                    "before": [],
+                    "after": [],
+                },
+                "metadata": {
+                    "chunk_index": metadata.get("chunk_index"),
+                    "document_id": metadata.get("document_id")
+                }
+            })
+            raw_doc_chunks.append(cleaned_content)
     
     context_joined = "\n\n---\n\n".join(context_texts) if context_texts else ""
 
@@ -762,4 +804,106 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
         "analysis": raft_analysis,
         "retrieval_time": retrieval_time,
         "inference_time": inference_time
+    }
+
+
+def test_retrieval(query: str, top_k: int = 5, initial_k: int = 20) -> dict:
+    """
+    Retrieval-only pipeline (TANPA LLM generation).
+    
+    Berguna untuk menguji kualitas retrieval: apakah dokumen yang di-retrieve
+    sudah relevan dengan pertanyaan yang diberikan.
+    
+    Pipeline: Embedding Query → Vector Search (K=initial_k) → Re-ranking (K=top_k)
+    
+    Args:
+        query: Pertanyaan yang ingin diuji
+        top_k: Jumlah dokumen final setelah re-ranking (default 5)
+        initial_k: Jumlah dokumen awal dari vector search (default 20)
+    
+    Returns:
+        Dict berisi retrieved documents, skor, dan metadata retrieval.
+    """
+    supabase_table = os.getenv("SUPABASE_TABLE_NAME", "")
+    
+    t0 = time.time()
+    
+    # 1. Setup Vector Store
+    vector_store = SupabaseVectorStore(
+        client=supabase,
+        embedding=embeddings,
+        table_name=supabase_table,
+        query_name="match_documents"
+    )
+    
+    # 2. Initial Retrieval (Vector Search)
+    logger.info(f"[Test Retrieval] Mengambil top-{initial_k} dokumen awal untuk query: \"{query[:80]}...\"")
+    initial_docs = vector_store.similarity_search(query, k=initial_k)
+    
+    t1_vector = time.time()
+    vector_search_time = t1_vector - t0
+    
+    # 3. Re-ranking dengan Cross-Encoder
+    logger.info(f"[Test Retrieval] Re-ranking {len(initial_docs)} → top {top_k}...")
+    reranked_docs, top_score = rerank_documents(query=query, documents=initial_docs, top_k=top_k)
+    
+    # 3.5. Adjacent Chunk Expansion
+    logger.info("[Test Retrieval] Adjacent Chunk Expansion (window=3)...")
+    adjacent_map = fetch_adjacent_chunks(reranked_docs, window=3)
+    
+    t2_rerank = time.time()
+    reranking_time = t2_rerank - t1_vector
+    total_time = t2_rerank - t0
+    
+    # 4. Format hasil retrieval
+    retrieved_documents = []
+    for rank, doc in enumerate(reranked_docs, start=1):
+        metadata = doc.metadata
+        
+        # Ambil neighbor chunks
+        doc_id = metadata.get("document_id")
+        chunk_idx = metadata.get("chunk_index")
+        map_key = (doc_id, int(chunk_idx)) if doc_id and chunk_idx is not None else None
+        adj = adjacent_map.get(map_key) if map_key else None
+        
+        # Build expanded context
+        expanded_content = _build_expanded_context_block(doc, adjacent_map)
+
+        retrieved_documents.append({
+            "rank": rank,
+            "content": doc.page_content,
+            "expanded_content": expanded_content,
+            "neighbor_chunks": {
+                "before": adj["before"] if adj else [],
+                "after": adj["after"] if adj else [],
+            },
+            "metadata": {
+                "source": metadata.get("source", "Unknown"),
+                "page": metadata.get("page", "?"),
+                "title": metadata.get("title", "Unknown"),
+                "village_name": metadata.get("village_name", ""),
+                "regency_name": metadata.get("regency_name", ""),
+                "perdes_number": metadata.get("perdes_number", ""),
+                "perdes_year": metadata.get("perdes_year", ""),
+                "document_id": metadata.get("document_id", ""),
+                "chunk_index": metadata.get("chunk_index", ""),
+            }
+        })
+    
+    logger.info(
+        f"[Test Retrieval] Selesai — {len(retrieved_documents)} dokumen retrieved, "
+        f"top_score={top_score:.4f}, total_time={total_time:.2f}s"
+    )
+    
+    return {
+        "query": query,
+        "top_score": top_score,
+        "num_initial_candidates": len(initial_docs),
+        "num_reranked": len(retrieved_documents),
+        "retrieved_documents": retrieved_documents,
+        "timing": {
+            "vector_search_seconds": round(vector_search_time, 3),
+            "reranking_seconds": round(reranking_time, 3),
+            "total_seconds": round(total_time, 3),
+        }
     }
