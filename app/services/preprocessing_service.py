@@ -13,7 +13,6 @@ import platform
 
 load_dotenv()
 
-# [OCR] Konfigurasi Path Tesseract
 _tesseract_default = (
     r'C:\Program Files\Tesseract-OCR\tesseract.exe'
     if platform.system() == 'Windows'
@@ -65,10 +64,8 @@ def clean_legal_text(text: str) -> str:
     
     text = _fix_ocr_spacing(text)
     
-    # Gabungkan marker list yang terputus dengan baris baru (misal: "a. \n bahwa")
     text = re.sub(r'(?m)(^|\s)([a-z]|\d{1,2})\.\s*\n\s*', r'\1\2. ', text)
     
-    # Perbaiki typo khusus preamble
     text = re.sub(r'\bmenginat\b', 'mengingat', text, flags=re.IGNORECASE)
 
     # TAHAP 2: Konversi ke LOWERCASE
@@ -89,7 +86,6 @@ def clean_legal_text(text: str) -> str:
     text = re.sub(r'(?m)^p\s*s\s*', '1. ', text)
     text = re.sub(r'(?m)^/\s*', '7. ', text)
 
-    # Potong lampiran/tabel setelah kalimat penutup (dibuat lebih fleksibel)
     closing_match = re.search(
         r'agar\s+(?:setiap|semua)\s+orang\s+(?:dapat\s+)?mengetahui(?:nya)?',
         text,
@@ -111,7 +107,7 @@ def clean_legal_text(text: str) -> str:
             else:
                 text = text[:closing_match.end()]
     
-    # TAHAP 4: Penghapusan karakter aneh / noise
+    # TAHAP 4: Penghapusan karakter noise
     text = re.sub(r'[*\^~`{}\[\]<>|]', ' ', text)
     text = re.sub(r'[|_\-\[\]{}><]{2,}', ' ', text)
     text = re.sub(r'[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
@@ -214,7 +210,7 @@ def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
         
         header_lines = lines[:min(header_end + 5, 25)]
         
-        # Gabungkan baris header menjadi satu teks blok.
+
         header_block = " ".join(header_lines).upper()
         
         # 1. Ekstrak nama desa (Lebih tangguh terhadap akhiran NOMOR, NOMOR., atau NO)
@@ -235,21 +231,18 @@ def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
                     village_name = potensi_desa
 
         # 3. [PERBAIKAN UTAMA] Ekstrak Nomor dan Tahun 
-        # Menoleransi awalan "NOMOR" atau "NO", serta tanda baca titik, koma, spasi berlebih
         nomor_match = re.search(r'(?:NOMOR|NO)\s*[\.\:\-,]?\s*(\d+)\s*TAHUN\s*[\.\:\-,]?\s*(\d{4})', header_block)
         if nomor_match:
             perdes_number = nomor_match.group(1)
             perdes_year = nomor_match.group(2)
 
         # 4. [PERBAIKAN FITUR] Ekstrak Judul menggunakan RegEx pada header_block
-        # Mengurangi resiko gagal karena teks terpotong ke baris bawah akibat layout PDF
         tentang_match = re.search(r'TENTANG\s+(.*?)(?:\s+DENGAN\s+RAHMAT|\s+KEPALA\s+DESA|\s+MENIMBANG)', header_block)
         if tentang_match:
             potensi_judul = tentang_match.group(1).strip().lower()
             if len(potensi_judul) > 5:
                 perdes_title = potensi_judul
         else:
-            # Fallback (Cara lama) jika regex gagal
             for i, line in enumerate(header_lines):
                 upper_line = line.upper()
                 if upper_line.strip() == "TENTANG" and i + 1 < len(lines):
@@ -287,7 +280,7 @@ def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
     except Exception as e:
         logger.warning(f"Gagal mengekstrak metadata perdes: {e}")
     
-    document_id = f"perdes_{village_name}_{perdes_number}_{perdes_year}"
+    document_id = f"perdes_dis{village_name}_{perdes_number}_{perdes_year}"
     document_title = f"Peraturan Desa {village_name.title()} No. {perdes_number} Tahun {perdes_year} - {perdes_title.title()}"
     
     return {
@@ -312,7 +305,6 @@ def extract_text_from_pdf(file_path: str):
         page = pdf_doc.load_page(page_num)
         text = page.get_text("text", sort=True).strip()
         
-        # SMART FALLBACK OCR
         if len(text) < 50:
             logger.info(f"Halaman {page_num + 1} minim teks. Mencoba ekstraksi dengan OCR...")
             try:
@@ -420,7 +412,6 @@ def _parse_perdes_sections(text: str) -> list:
             line = lines[i].strip()
             lower = line.lower()
             
-            # Toleransi BAB pakai angka, titik, atau format inline
             bab_match = re.match(r'^\s*bab\s+([ivxlcdm]+|\d+)(?:[\.\:\s]+(.*))?$', lower)
             if bab_match:
                 current_bab = f"bab {bab_match.group(1)}"
@@ -438,7 +429,6 @@ def _parse_perdes_sections(text: str) -> list:
                 temp_bagian = ""
                 temp_bagian_title = ""
             
-            # Toleransi Bagian yang berspasi (contoh: ke sepuluh) & format inline
             bagian_match = re.match(r'^\s*bagian\s+(ke\s*[a-z]+|[a-z]+|\d+)(?:[\.\:\s]+(.*))?$', lower)
             if bagian_match:
                 norm_bagian = bagian_match.group(1).replace(' ', '')
@@ -516,7 +506,6 @@ def _parse_perdes_sections(text: str) -> list:
         if not pasal_content:
             continue
         
-        # Mencegah pemotongan yang salah pada blok tanda tangan
         pasal_content = re.split(
             r'\n\s*(?:ditetapkan|diundangkan)\s+di[\s:]',
             pasal_content, flags=re.IGNORECASE
@@ -524,7 +513,6 @@ def _parse_perdes_sections(text: str) -> list:
         if not pasal_content:
             continue
         
-        # Penyesuaian ayat_markers agar mentolerir kurung tanpa spasi
         ayat_markers = re.findall(r'(?m)^\s*\(\d+\)', pasal_content)
         
         if len(ayat_markers) >= 2:
@@ -768,11 +756,9 @@ def extract_and_chunk_pdf(file_path: str, save_to_db: bool = True):
     documents = extract_text_from_pdf(file_path)
     chunks = chunk_documents(documents)
     
-    # Tetap simpan txt & json agar bisa direview via Postman walau false
     save_results_to_folder(file_path, documents, chunks)
     
     if save_to_db:
-        # export_finetune_dataset(chunks, file_path)
         postgres_saved = save_chunks_to_postgres(chunks)
         if postgres_saved:
             logger.info(f"Chunks untuk '{os.path.basename(file_path)}' berhasil disimpan ke PostgreSQL.")

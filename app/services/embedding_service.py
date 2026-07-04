@@ -7,22 +7,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Inisialisasi client Supabase
 supabase: Client = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
 
-# Inisialisasi model embedding
 embeddings = OpenAIEmbeddings(
     model=os.getenv("EMBEDDING_MODEL", "openai/text-embedding-3-large"),
     api_key=os.getenv("OPENAI_API_KEY", ""),
-    base_url=os.getenv("OPENAI_BASE_URL", "https://api.maiarouter.ai/v1")
+    base_url=os.getenv("OPENAI_BASE_URL", "https://api.maiarouter.ai/v1"),
+    default_headers={"User-Agent": "curl/7.68.0"}
 )
 
 
 def check_document_exists(document_id: str) -> int:
-    """
-    Cek apakah chunks dengan document_id tertentu sudah ada di Supabase.
-    Mengembalikan jumlah chunks yang ditemukan (0 = belum ada).
-    """
     try:
         table_name = os.getenv("SUPABASE_TABLE_NAME", "documents")
         result = supabase.table(table_name).select(
@@ -36,13 +31,6 @@ def check_document_exists(document_id: str) -> int:
 
 
 def delete_document_chunks(document_id: str) -> int:
-    """
-    Hapus semua chunks dengan document_id tertentu dari Supabase.
-    Digunakan saat re-ingest dokumen yang sama (mengganti versi lama).
-    
-    Returns:
-        Jumlah chunk yang berhasil dihapus.
-    """
     try:
         table_name = os.getenv("SUPABASE_TABLE_NAME", "documents")
         
@@ -59,7 +47,6 @@ def delete_document_chunks(document_id: str) -> int:
 
 
 def store_chunks_to_supabase(chunks):
-    # LangChain akan otomatis memanggil API Embedding dan menyimpan vektornya ke Supabase
     vector_store = SupabaseVectorStore.from_documents(
         chunks,
         embeddings,

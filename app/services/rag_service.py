@@ -1,5 +1,6 @@
 import os
 import time
+import json
 import requests
 import re
 from typing import Optional, Dict, Any, List
@@ -22,7 +23,8 @@ supabase: Client = create_client(supabase_url, supabase_key)
 embeddings = OpenAIEmbeddings(
     model="openai/text-embedding-3-large",
     api_key=os.getenv("OPENAI_API_KEY", ""),
-    base_url=os.getenv("OPENAI_BASE_URL", "")
+    base_url=os.getenv("OPENAI_BASE_URL", ""),
+    default_headers={"User-Agent": "curl/7.68.0"}
 )
 
 # 2. DAFTAR MODEL YANG TERSEDIA
@@ -239,7 +241,6 @@ class HuggingFaceService:
             if "message" in choice and "content" in choice["message"]:
                 result["content"] = choice["message"]["content"]
             
-            # Ambil metadata RAFT jika ada
             if "raft_metadata" in response:
                 result["raft_metadata"] = response["raft_metadata"]
         
@@ -258,64 +259,52 @@ class HuggingFaceService:
         raw_doc_chunks: Optional[List[str]] = None,
         **kwargs
     ) -> Optional[str]:
-        """
-        Chat dengan context (untuk RAG)
-        
-        Args:
-            user_question: Pertanyaan user
-            context: Context dari dokumen (joined text, untuk model non-RAFT)
-            system_prompt: Custom system prompt (optional)
-            model_id: ID model yang akan digunakan (1-9)
-            chat_history: Riwayat percakapan sebelumnya (list of {role, content}).
-                          Digunakan agar LLM memahami konteks follow-up questions.
-            raw_doc_chunks: List of individual document chunk strings (untuk RAFT model).
-                           RAFT menerima dokumen terpisah, bukan joined context.
-        """
-        # Cek apakah ini RAFT model — RAFT tidak butuh system_prompt,
-        # dia menerima dokumen mentah dan melakukan reasoning internal
         model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS[1])
         is_raft = model_info.get("type") == "raft"
         
         if is_raft:
-            # RAFT: kirim pertanyaan + dokumen mentah, tanpa system_prompt
             messages = [{"role": "user", "content": user_question}]
             
             logger.info(f"Calling RAFT Model ({model_info['name']}) with question: {user_question[:50]}... (docs: {len(raw_doc_chunks or [])})")
-            # Gunakan get_completion_with_metadata agar analisis RAFT tidak hilang
             raft_result = self.get_completion_with_metadata(messages, model_id=model_id, raw_doc_chunks=raw_doc_chunks or [], **kwargs)
-            # Simpan metadata ke mutable dict agar bisa diakses caller (get_answer_from_rag)
             raft_meta = raft_result.get("raft_metadata")
             if raft_meta and "_raft_metadata_out" in kwargs and isinstance(kwargs["_raft_metadata_out"], dict):
                 kwargs["_raft_metadata_out"].update(raft_meta)
             return raft_result.get("content")
         
-        # Non-RAFT: bangun system_prompt dengan konteks dokumen
+        # system_prompt TOT dengan konteks dokumen Zero-Shot
         if not system_prompt:
             system_prompt = (f"""
-                    Anda adalah asisten hukum pemerintahan desa.
-        
-                    Jawab pertanyaan pengguna hanya berdasarkan konteks dokumen yang diberikan.
-        
-                    Aturan:
+                    Anda adalah asisten hukum pemerintahan desa yang teliti.
+
+                    Sebelum menjawab, lakukan penalaran internal "Tree of Thoughts" (jangan tulis proses ini ke output):
+                    - Pikirkan 2-3 kemungkinan pendekatan untuk menjawab.
+                    - Evaluasi setiap pendekatan: mana yang paling didukung dokumen?
+                    - Pilih atau sintesiskan pendekatan terbaik.
+
+                    Setelah penalaran selesai, tulis HANYA jawaban akhirnya langsung. JANGAN sertakan label [EKSPLORASI], [EVALUASI], atau [JAWABAN AKHIR] dalam output.
+
+                    Aturan menjawab:
                     1. Gunakan hanya informasi dalam konteks dokumen.
-                    2. Jangan menggunakan informasi di luar konteks dokumen.
-                    3. Jangan menambahkan asumsi, opini pribadi, atau informasi yang tidak ada dalam dokumen.
-                    4. Sertakan pasal, ayat, atau bagian yang ada dalam dokumen jika tersedia dalam konteks.
-                    5. PENTING: Selalu sebutkan sumber dokumen secara spesifik — termasuk nama desa, nomor peraturan, dan tahun — saat mengutip. Contoh: "Berdasarkan Peraturan Desa Biru No. 07 Tahun 2015, Pasal 14..."
-                    6. Jika ada beberapa peraturan dari desa berbeda dengan isi serupa, pastikan Anda merujuk ke peraturan yang tepat sesuai konteks dokumen yang diberikan.
-                    7. Gunakan bahasa yang mudah dipahami oleh manusia.
-        
+                    2. Jangan menambahkan asumsi, opini pribadi, atau informasi di luar dokumen.
+                    3. Sertakan pasal dan ayat yang relevan jika tersedia.
+                    4. Sebutkan sumber secara spesifik: nama desa, nomor peraturan, dan tahun. Contoh: "Berdasarkan Peraturan Desa Biru No. 07 Tahun 2015, Pasal 14..."
+                    5. Jika konteks berisi beberapa bagian yang relevan dengan pertanyaan, GABUNGKAN seluruh 
+                        informasi relevan tersebut menjadi satu jawaban lengkap — jangan hanya menjawab dari 
+                        satu bagian saja jika bagian lain juga relevan.
+                    6. Jika ditemukan dua sumber yang membahas pasal/ayat yang sama namun ISINYA BERBEDA 
+                        (berpotensi konflik data), JANGAN memilih salah satu secara diam-diam. Sebutkan 
+                        eksplisit bahwa ditemukan perbedaan data antar sumber, dan tampilkan kedua versinya.
+
                     KONTEKS DOKUMEN:
                     {context}
                     """
             )
         
-        # Build messages: system → history → user
         messages = [
             {"role": "system", "content": system_prompt},
         ]
         
-        # Insert conversation history (agar LLM paham konteks follow-up)
         if chat_history:
             for msg in chat_history:
                 messages.append({
@@ -323,13 +312,11 @@ class HuggingFaceService:
                     "content": msg.get("content", "")
                 })
         
-        # Current user question (always last)
         messages.append({"role": "user", "content": user_question})
         
         logger.info(f"Calling Model API ({model_info['name']}) with question: {user_question[:50]}... (history: {len(chat_history or [])} messages)")
         return self.get_completion(messages, model_id=model_id, **kwargs)
 
-# Singleton instance
 hf_service = HuggingFaceService()
 
 
@@ -341,49 +328,16 @@ def rewrite_query_with_history(
     chat_history: Optional[List[Dict[str, str]]] = None,
     max_history_turns: int = 5
 ) -> str:
-    """
-    Mengubah follow-up question yang ambigu menjadi standalone query
-    dengan menggunakan konteks dari riwayat percakapan.
-    
-    Masalah yang diatasi:
-    - User tanya: "dimana peraturan tentang ibu dan bayi" → retrieval berhasil ✅
-    - User follow-up: "apa isi pasal satu itu?" → retrieval GAGAL ❌
-      karena query ambigu (pasal satu dari dokumen mana?)
-    - Setelah rewriting: "apa isi pasal 1 dalam peraturan desa tentang
-      kesehatan ibu dan bayi" → retrieval berhasil ✅
-    
-    Strategi:
-    - Jika TIDAK ada chat history → return query asli (tidak perlu rewrite)
-    - Jika ADA chat history → gunakan LLM cepat (gpt-3.5-turbo via Maia Router)
-      untuk menghasilkan standalone query yang menggabungkan konteks percakapan.
-    - Rewritten query dipakai untuk RETRIEVAL (vector search + reranking)
-    - Original query tetap dipakai untuk GENERATION (agar LLM menjawab apa yang user tanyakan)
-
-    
-    Args:
-        original_query: Pertanyaan user saat ini (apa adanya)
-        chat_history: Riwayat percakapan (list of {role, content})
-        max_history_turns: Maksimal jumlah pasangan percakapan yang dipakai (default 3)
-    
-    Returns:
-        Rewritten query (standalone) jika berhasil, atau original_query jika gagal/tidak perlu.
-    """
-    # Jika tidak ada history, tidak perlu rewrite
     if not chat_history:
         return original_query
     
-    # Ambil N turns terakhir dari history (1 turn = 1 pair user+assistant)
-    # Batasi agar prompt tidak terlalu panjang
     recent_history = chat_history[-(max_history_turns * 2):]
     
-    # Format history menjadi teks yang mudah dipahami LLM
     history_text = ""
     for msg in recent_history:
         role = "User" if msg.get("role") == "user" else "Asisten"
         history_text += f"{role}: {msg.get('content', '')[:300]}\n"
     
-    # Prompt untuk query rewriting
-    # Instruksi: gabungkan konteks percakapan ke pertanyaan user agar jadi standalone
     rewrite_messages = [
         {
             "role": "system",
@@ -413,11 +367,9 @@ def rewrite_query_with_history(
     ]
     
     try:
-        # Gunakan model gpt-3.5-turbo (model_id=6) via Maia Router
-        # Alasan: cepat (<1 detik), murah, dan cukup untuk tugas sederhana seperti rewrite
         rewritten = hf_service.get_completion(
             rewrite_messages,
-            model_id=6,  # openai/gpt-3.5-turbo
+            model_id=6, 
             temperature=0.0,
             max_tokens=200
         )
@@ -445,43 +397,17 @@ def fetch_adjacent_chunks(
     reranked_docs: list,
     window: int = 1
 ) -> dict:
-    """
-    Memperluas konteks setiap chunk yang di-retrieve dengan mengambil
-    chunk tetangga (chunk[i-1] dan chunk[i+1]) dari dokumen yang sama.
-    
-    Kenapa?
-    - Chunk butir-level bersifat atomic tapi sering kehilangan konteks
-      sekitarnya (definisi, pengecualian, syarat).
-    - Contoh: chunk "Pasal 14 butir 3" mungkin merujuk ke definisi di
-      butir 1-2 yang tidak di-retrieve. Adjacent chunk mengisi celah ini.
-
-    
-    Args:
-        reranked_docs: List of Document objects hasil re-ranking
-        window: Jumlah chunk tetangga di setiap sisi (default 1 = sebelum + sesudah)
-    
-    Returns:
-        Dict mapping (document_id, chunk_index) → list of adjacent content strings.
-        Format: {
-            ("perdes_biru_07_2015", 5): {
-                "before": ["content chunk 4"],  # chunk sebelum (i-1)
-                "after": ["content chunk 6"]    # chunk sesudah (i+1)
-            }
-        }
-    """
     table_name = os.getenv("SUPABASE_TABLE_NAME", "documents")
-    adjacent_map = {}  # key: (doc_id, chunk_idx) → {"before": [], "after": []}
+    adjacent_map = {}  
     
     # STEP 1: Kumpulkan semua (document_id, chunk_index) yang perlu di-fetch
-    # Gunakan set agar tidak fetch duplikat (misal 2 retrieved chunk bertetangga)
-    needed_keys = set()  # set of (document_id, chunk_index)
-    doc_chunk_pairs = []  # list of (document_id, chunk_index) untuk setiap reranked doc
+    needed_keys = set() 
+    doc_chunk_pairs = []  
     
     for doc in reranked_docs:
         doc_id = doc.metadata.get("document_id")
         chunk_idx = doc.metadata.get("chunk_index")
         
-        # Graceful degradation: skip jika metadata tidak ada (data lama tanpa chunk_index)
         if not doc_id or chunk_idx is None:
             doc_chunk_pairs.append((None, None))
             continue
@@ -489,33 +415,25 @@ def fetch_adjacent_chunks(
         chunk_idx = int(chunk_idx)
         doc_chunk_pairs.append((doc_id, chunk_idx))
         
-        # Chunk sebelum: i-1, i-2, ..., i-window
         for offset in range(1, window + 1):
             adj_idx = chunk_idx - offset
-            if adj_idx >= 1:  # chunk_index starts at 1
+            if adj_idx >= 1:  
                 needed_keys.add((doc_id, adj_idx))
         
-        # Chunk sesudah: i+1, i+2, ..., i+window
         for offset in range(1, window + 1):
             adj_idx = chunk_idx + offset
             needed_keys.add((doc_id, adj_idx))
     
-    # Jika tidak ada chunk_index di metadata, return empty
     if not needed_keys:
         logger.info("Adjacent Chunk Expansion: tidak ada chunk_index di metadata, skip.")
         return {}
     
-    # STEP 2: Batch query ke Supabase — ambil semua adjacent chunks sekaligus
-    # Lebih efisien daripada query per-chunk (1 round-trip vs N round-trips)
-    adjacent_lookup = {}  # (doc_id, chunk_idx) → content
-    
-    # Group by document_id untuk mengurangi jumlah query
+    # STEP 2: Batch query ke Supabase
+    adjacent_lookup = {}  
     doc_ids = set(doc_id for doc_id, _ in needed_keys)
     
     try:
         for doc_id in doc_ids:
-            # Fetch semua chunks dari dokumen ini yang memiliki chunk_index
-            # di antara min_index dan max_index yang dibutuhkan
             indices_for_doc = [idx for did, idx in needed_keys if did == doc_id]
             if not indices_for_doc:
                 continue
@@ -523,8 +441,6 @@ def fetch_adjacent_chunks(
             min_idx = min(indices_for_doc)
             max_idx = max(indices_for_doc)
             
-            # Query: ambil range chunk dari dokumen ini dalam 1 query
-            # Menggunakan .in_() dengan list string agar terhindar dari bug komparasi lexicographical (misal "10" < "9")
             idx_strings = [str(i) for i in range(min_idx, max_idx + 1)]
             result = (
                 supabase
@@ -561,13 +477,11 @@ def fetch_adjacent_chunks(
         before_contents = []
         after_contents = []
         
-        # Chunk sebelum (urut dari terjauh ke terdekat: i-2, i-1)
         for offset in range(window, 0, -1):
             adj_key = (doc_id, chunk_idx - offset)
             if adj_key in adjacent_lookup:
                 before_contents.append(adjacent_lookup[adj_key])
         
-        # Chunk sesudah (urut dari terdekat ke terjauh: i+1, i+2)
         for offset in range(1, window + 1):
             adj_key = (doc_id, chunk_idx + offset)
             if adj_key in adjacent_lookup:
@@ -586,25 +500,10 @@ def _build_expanded_context_block(
     doc,
     adjacent_map: dict
 ) -> str:
-    """
-    Bangun context block yang diperluas dengan chunk tetangga.
-    
-    Format output:
-    ┌─────────────────────────────────────────────┐
-    │ [Metadata Header]                           │
-    │ [Konteks Sebelumnya] ← chunk i-1 (if any)  │
-    │ ── BAGIAN UTAMA ──    ← chunk i (retrieved) │
-    │ [Konteks Berikutnya] ← chunk i+1 (if any)  │
-    └─────────────────────────────────────────────┘
-    
-    Adjacent chunks diberi label jelas agar LLM tahu mana yang merupakan
-    konteks pendukung vs bagian utama yang langsung relevan dengan query.
-    """
     metadata = doc.metadata
     doc_id = metadata.get("document_id", "unknown")
     chunk_idx = metadata.get("chunk_index")
     
-    # Metadata header (disambiguasi antar peraturan desa)
     meta_header = (
         f"[Sumber: {metadata.get('title', 'Unknown')}] "
         f"[Desa: {metadata.get('village_name', 'unknown')}] "
@@ -613,31 +512,90 @@ def _build_expanded_context_block(
         f"[Halaman: {metadata.get('page', '?')}]"
     )
     
-    # Cek apakah ada adjacent chunks untuk dokumen ini
     map_key = (doc_id, int(chunk_idx)) if chunk_idx is not None else None
     adj = adjacent_map.get(map_key) if map_key else None
     
     parts = [meta_header]
     
     if adj and adj["before"]:
-        # Gabungkan semua chunk sebelumnya
         before_text = "\n\n".join(adj["before"])
         parts.append(f"[Konteks Sebelumnya — pasal/butir sebelumnya]\n{before_text}")
     
-    # Bagian utama: chunk yang di-retrieve
     parts.append(f"[Bagian Utama]\n{doc.page_content}")
     
     if adj and adj["after"]:
-        # Gabungkan semua chunk sesudahnya
         after_text = "\n\n".join(adj["after"])
         parts.append(f"[Konteks Berikutnya — pasal/butir selanjutnya]\n{after_text}")
     
     return "\n\n".join(parts)
 
 
+def evaluate_rag_answer(query: str, context: str, answer: str) -> dict:
+    """LLM-as-a-Judge untuk mengevaluasi kualitas jawaban RAG."""
+    eval_prompt = (
+        "Anda adalah juri (evaluator) untuk sistem RAG hukum desa.\n"
+        "Tugas Anda adalah menilai JAWABAN berdasarkan KONTEKS dan PERTANYAAN.\n\n"
+        "Berikan output HANYA dalam format JSON dengan struktur:\n"
+        '{"grounded": true/false, "relevant": true/false, "score": 1-10, "reason": "alasan singkat"}\n\n'
+        f"PERTANYAAN: {query}\n"
+        f"KONTEKS DOKUMEN:\n{context}\n\n"
+        f"JAWABAN SISTEM:\n{answer}\n"
+    )
+    messages = [{"role": "system", "content": eval_prompt}]
+    try:
+        # Memanggil API LLM secara langsung (menggunakan gpt-4o-mini)
+        base_url = os.getenv("OPENAI_BASE_URL", "https://api.maiarouter.ai/v1").rstrip('/')
+        api_url = f"{base_url}/chat/completions"
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        
+        payload = {
+            "model": "openai/gpt-4o-mini",
+            "messages": messages,
+            "temperature": 0.0,
+            "max_tokens": 150
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "curl/7.68.0"
+        }
+        
+        response = requests.post(api_url, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        
+        result = response.json()
+        if "choices" in result and len(result["choices"]) > 0:
+            content = result["choices"][0]["message"]["content"]
+            match = re.search(r'\{[\s\S]*\}', content)
+            if match:
+                return json.loads(match.group())
+    except Exception as e:
+        logger.warning(f"LLM-as-a-Judge evaluation failed: {e}")
+    
+    return {"grounded": None, "relevant": None, "score": None, "reason": "Evaluasi gagal diproses."}
+
+def _extract_final_answer(text: str) -> str:
+    """
+    Fallback extractor: jika model masih menulis [EKSPLORASI] / [EVALUASI] / [JAWABAN AKHIR],
+    ambil hanya teks setelah penanda [JAWABAN AKHIR] (case-insensitive, multi-format).
+    Jika tidak ada penanda, kembalikan teks asli.
+    """
+    import re as _re
+    # Cari berbagai varian penanda jawaban akhir
+    pattern = _re.compile(
+        r'\[JAWABAN AKHIR\]|\*\*\[JAWABAN AKHIR\]\*\*|\*\*JAWABAN AKHIR\*\*|JAWABAN AKHIR\s*:',
+        _re.IGNORECASE
+    )
+    match = pattern.search(text)
+    if match:
+        extracted = text[match.end():].strip()
+        # Hilangkan baris kosong berlebih di awal
+        return extracted.lstrip('\n').strip()
+    return text.strip()
+
+
 def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[str, str]] = None) -> dict:
     """Full pipeline RAG: Query Rewriting → Retrieval → Reranking → Adjacent Expansion → Generation."""
-    # Mengambil pengaturan dari environment variable
     supabase_table = os.getenv("SUPABASE_TABLE_NAME", "")
     
     # ==========================================
@@ -645,11 +603,6 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     # ==========================================
     t0_retrieval = time.time()
     
-    # Jika ada chat history, rewrite query ambigu menjadi standalone.
-    # Contoh: "apa isi pasal satu itu?" → "apa isi pasal 1 dalam Perdes Kesehatan
-    # Ibu Bayi Baru Lahir Desa Biru No. 07 Tahun 2015?"
-    # Rewritten query dipakai untuk RETRIEVAL agar lebih akurat.
-    # Original query tetap dipakai untuk GENERATION agar LLM menjawab apa yang user tanyakan.
     retrieval_query = rewrite_query_with_history(
         original_query=query,
         chat_history=chat_history
@@ -666,8 +619,6 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     # ==========================================
     # TAHAP 1: INITIAL RETRIEVAL (K=20)
     # ==========================================
-    # Ambil lebih banyak dokumen (misal 20) untuk menjaring semua kemungkinan
-    # PENTING: Gunakan retrieval_query (rewritten) bukan query asli
     initial_k = 20
     logger.info(f"Tahap 1: Mengambil top-{initial_k} dokumen awal dari Supabase...")
     initial_docs = vector_store.similarity_search(retrieval_query, k=initial_k)
@@ -677,16 +628,8 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     # ==========================================
     final_k = 5
     logger.info("Tahap 2: Menerapkan metode Re-ranking menggunakan MS Marco Cross-Encoder...")
-    # Gunakan retrieval_query (rewritten) agar cross-encoder menilai relevansi
-    # berdasarkan query yang lebih spesifik (bukan query ambigu)
     reranked_docs, top_score = rerank_documents(query=retrieval_query, documents=initial_docs, top_k=final_k)
     
-    # ==========================================
-    # TAHAP 2.5: CONFIDENCE THRESHOLD CHECK
-    # ==========================================
-    # MS Marco Cross-Encoder outputs logit scores (can be negative).
-    # Typical scores: relevant > 0, irrelevant < -5.
-    # Jika skor tertinggi di bawah threshold, query tidak relevan dengan dokumen apapun.
     CONFIDENCE_THRESHOLD = -5.0
     logger.info(f"Top re-ranking score: {top_score:.4f} (threshold: {CONFIDENCE_THRESHOLD})")
     
@@ -727,7 +670,6 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     for doc in reranked_docs:
         metadata = doc.metadata
         
-        # Ambil neighbor chunks untuk ditampilkan di response
         doc_id = metadata.get("document_id")
         chunk_idx = metadata.get("chunk_index")
         map_key = (doc_id, int(chunk_idx)) if doc_id and chunk_idx is not None else None
@@ -751,8 +693,6 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
             })
             raw_doc_chunks.append(doc.page_content)
         else:
-            # RAFT: Tidak ada penambahan adjacent chunk
-            # Bersihkan metadata header [dokumen: ...] dari konten murni untuk RAFT
             cleaned_content = re.sub(r'^(\[[^\]]+\]\s*)+\n*', '', doc.page_content, flags=re.IGNORECASE).strip()
             
             sources.append({
@@ -783,18 +723,23 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
         model_id=model_id,
         chat_history=chat_history,
         raw_doc_chunks=raw_doc_chunks,
-        _raft_metadata_out=raft_metadata_holder  # RAFT metadata akan disimpan di sini
+        _raft_metadata_out=raft_metadata_holder
     )
     t1_inference = time.time()
     inference_time = t1_inference - t0_inference
     
-    # Fallback jika API gagal atau mengembalikan None
-    final_answer = answer if answer else "Maaf, terjadi kesalahan saat mencoba menghasilkan jawaban dari model bahasa."
+    raw_answer = answer if answer else "Maaf, terjadi kesalahan saat mencoba menghasilkan jawaban dari model bahasa."
+    final_answer = _extract_final_answer(raw_answer)
 
-    # Ambil RAFT metadata (analisis dokumen) jika ada
+
     raft_analysis = None
     if raft_metadata_holder is not None:
         raft_analysis = raft_metadata_holder.get("analisis")
+
+    # LLM-as-a-Judge
+    logger.info("Mengevaluasi jawaban dengan LLM-as-a-Judge...")
+    eval_context = context_joined if context_joined else "\n".join(raw_doc_chunks)
+    judge_evaluation = evaluate_rag_answer(query, eval_context, final_answer)
 
     return {
         "answer": final_answer,
@@ -802,33 +747,17 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
         "model_used": model_info["name"],
         "confidence_score": top_score,
         "analysis": raft_analysis,
+        "judge_evaluation": judge_evaluation,
         "retrieval_time": retrieval_time,
         "inference_time": inference_time
     }
 
 
 def test_retrieval(query: str, top_k: int = 5, initial_k: int = 20) -> dict:
-    """
-    Retrieval-only pipeline (TANPA LLM generation).
-    
-    Berguna untuk menguji kualitas retrieval: apakah dokumen yang di-retrieve
-    sudah relevan dengan pertanyaan yang diberikan.
-    
-    Pipeline: Embedding Query → Vector Search (K=initial_k) → Re-ranking (K=top_k)
-    
-    Args:
-        query: Pertanyaan yang ingin diuji
-        top_k: Jumlah dokumen final setelah re-ranking (default 5)
-        initial_k: Jumlah dokumen awal dari vector search (default 20)
-    
-    Returns:
-        Dict berisi retrieved documents, skor, dan metadata retrieval.
-    """
     supabase_table = os.getenv("SUPABASE_TABLE_NAME", "")
     
     t0 = time.time()
     
-    # 1. Setup Vector Store
     vector_store = SupabaseVectorStore(
         client=supabase,
         embedding=embeddings,
@@ -836,18 +765,15 @@ def test_retrieval(query: str, top_k: int = 5, initial_k: int = 20) -> dict:
         query_name="match_documents"
     )
     
-    # 2. Initial Retrieval (Vector Search)
     logger.info(f"[Test Retrieval] Mengambil top-{initial_k} dokumen awal untuk query: \"{query[:80]}...\"")
     initial_docs = vector_store.similarity_search(query, k=initial_k)
     
     t1_vector = time.time()
     vector_search_time = t1_vector - t0
     
-    # 3. Re-ranking dengan Cross-Encoder
     logger.info(f"[Test Retrieval] Re-ranking {len(initial_docs)} → top {top_k}...")
     reranked_docs, top_score = rerank_documents(query=query, documents=initial_docs, top_k=top_k)
     
-    # 3.5. Adjacent Chunk Expansion
     logger.info("[Test Retrieval] Adjacent Chunk Expansion (window=3)...")
     adjacent_map = fetch_adjacent_chunks(reranked_docs, window=3)
     
@@ -855,28 +781,20 @@ def test_retrieval(query: str, top_k: int = 5, initial_k: int = 20) -> dict:
     reranking_time = t2_rerank - t1_vector
     total_time = t2_rerank - t0
     
-    # 4. Format hasil retrieval
     retrieved_documents = []
     for rank, doc in enumerate(reranked_docs, start=1):
         metadata = doc.metadata
         
-        # Ambil neighbor chunks
         doc_id = metadata.get("document_id")
         chunk_idx = metadata.get("chunk_index")
         map_key = (doc_id, int(chunk_idx)) if doc_id and chunk_idx is not None else None
         adj = adjacent_map.get(map_key) if map_key else None
         
-        # Build expanded context
         expanded_content = _build_expanded_context_block(doc, adjacent_map)
 
         retrieved_documents.append({
             "rank": rank,
             "content": doc.page_content,
-            "expanded_content": expanded_content,
-            "neighbor_chunks": {
-                "before": adj["before"] if adj else [],
-                "after": adj["after"] if adj else [],
-            },
             "metadata": {
                 "source": metadata.get("source", "Unknown"),
                 "page": metadata.get("page", "?"),
