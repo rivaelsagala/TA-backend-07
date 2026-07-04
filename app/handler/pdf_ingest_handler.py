@@ -11,7 +11,6 @@ def handle_generate_embedding():
     if file.filename == '':
         return jsonify({"error": "Tidak ada file PDF yang dipilih"}), 400
 
-    # Tangkap parameter save_to_db dari form-data (default: true agar tidak merusak sistem lama)
     save_to_db_str = request.form.get('save_to_db', 'true').lower()
     save_to_db = save_to_db_str in ['true', '1', 'yes']
         

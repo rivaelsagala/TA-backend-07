@@ -8,7 +8,6 @@ from app.services.embedding_service import (
 
 def ingest_pdf_to_vector_db(file_path: str, original_filename: str, save_to_db: bool = True):
     try:
-        # Lempar parameter ke fungsi ekstraksi
         chunks = extract_and_chunk_pdf(file_path, save_to_db)
         
         for chunk in chunks:
@@ -25,7 +24,6 @@ def ingest_pdf_to_vector_db(file_path: str, original_filename: str, save_to_db: 
         document_id = chunks[0].metadata.get('document_id', 'unknown') if chunks else 'unknown'
         existing_count = check_document_exists(document_id)
         
-        # Eksekusi penyimpanan hanya jika save_to_db == True
         if save_to_db:
             if existing_count > 0:
                 logger.info(f"Dokumen '{document_id}' sudah ada ({existing_count} chunks). Menghapus versi lama...")

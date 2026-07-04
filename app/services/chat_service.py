@@ -98,8 +98,6 @@ def get_session_history(session_id: int, limit: int = None):
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 if limit:
-                    # Subquery: ambil N rows terakhir (DESC), lalu urutkan balik ke ASC
-                    # agar hasilnya tetap kronologis (pesan lama → baru)
                     cur.execute("""
                         SELECT * FROM (
                             SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, semantic_similarity, metadata
@@ -136,7 +134,6 @@ def get_session_history(session_id: int, limit: int = None):
                         else:
                             sources = []
                         
-                        # Hapus 'metadata' dari setiap source agar respons tidak terlalu besar
                         cleaned_sources = []
                         for s in sources:
                             if isinstance(s, dict):
@@ -150,7 +147,6 @@ def get_session_history(session_id: int, limit: int = None):
                     else:
                         r['sources'] = []
                     
-                    # Susun ulang urutan key agar user_query tampil paling atas (Python 3.7+ mempertahankan urutan dictionary)
                     ordered_row = {
                         "user_query": r.get("user_query"),
                         "llm_response": r.get("llm_response"),
@@ -225,12 +221,10 @@ def save_chat_message(
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Ubah dictionary metadata menjadi JSON string
                 metadata_json = json.dumps(metadata) if metadata else None
                 
-                # Ekstrak nilai evaluasi jika evaluate=True (menghindari error jika evaluate=False/None)
                 faithfulness = evaluation.get("faithfulness") if evaluation else None
-                answer_relevance = evaluation.get("answer_relevancy") if evaluation else None # Mapping key Ragas ke DB
+                answer_relevance = evaluation.get("answer_relevancy") if evaluation else None
                 context_precision = evaluation.get("context_precision") if evaluation else None
                 context_recall = evaluation.get("context_recall") if evaluation else None
                 noise_sensitivity = evaluation.get("noise_sensitivity") if evaluation else None
@@ -249,7 +243,6 @@ def save_chat_message(
                     noise_sensitivity, semantic_similarity
                 ))
                 
-                # Update waktu session agar selalu muncul paling atas saat chat aktif
                 cur.execute("UPDATE chat_sessions SET updated_at = NOW() WHERE id = %s", (session_id,))
                 conn.commit()
                 return True

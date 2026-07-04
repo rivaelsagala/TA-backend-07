@@ -4,20 +4,7 @@ from loguru import logger
 
 
 def handle_test_retrieval():
-    """
-    Handler untuk endpoint test retrieval.
     
-    Request Body (JSON):
-        - question (str, required): Pertanyaan yang ingin diuji retrievalnya
-        - top_k (int, optional): Jumlah dokumen final setelah re-ranking (default 5)
-        - initial_k (int, optional): Jumlah dokumen awal dari vector search (default 20)
-    
-    Response:
-        - query: Pertanyaan yang diuji
-        - top_score: Skor tertinggi dari re-ranking
-        - retrieved_documents: List dokumen yang di-retrieve beserta metadata
-        - timing: Waktu eksekusi per tahap
-    """
     data = request.get_json()
     
     if not data or 'question' not in data:

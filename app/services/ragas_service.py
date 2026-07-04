@@ -12,42 +12,22 @@ from ragas.metrics import (
     faithfulness,
     answer_relevancy,
     context_precision,
-    context_recall,
-    # context_entity_recall,
-    # NoiseSensitivity  # dimatikan — terlalu lambat (banyak LLM call)
+    context_recall
 )
 from dotenv import load_dotenv
 
-# Import library Langchain untuk custom endpoint (Maiarouter)
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_openai.embeddings import OpenAIEmbeddings
 
-# Import wrapper Ragas untuk standarisasi format
 from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
 
 load_dotenv()
 
-# Supaya warning tidak mengganggu
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 class SemanticAnswerSimilarity:
-    """
-    Menghitung Semantic Answer Similarity (SAS) antara `answer` dan `ground_truth`
-    menggunakan Embedding Model + Cosine Similarity.
-
-    Fokus pada kesamaan MAKNA, bukan kesamaan karakter/tanda baca.
-    Hasil berupa float dalam rentang 0.0 – 1.0.
-
-    Atribut:
-        model_name (str): Nama embedding model yang dikonfigurasi via env
-                          EMBEDDING_MODEL (default: openai/text-embedding-3-large).
-
-    Metode:
-        compute_sas(answer, ground_truth)   -> float (single pair)
-        compute_sas_batch(pairs)            -> List[float] (batch pairs)
-    """
 
     def __init__(self, model_name: Optional[str] = None):
         self.api_key  = os.getenv("OPENAI_API_KEY", "")
@@ -57,11 +37,11 @@ class SemanticAnswerSimilarity:
             or os.getenv("EMBEDDING_MODEL", "openai/text-embedding-3-large")
         )
 
-        # Reuse LangChain OpenAIEmbeddings yang sudah dipakai di sistem
         self._embedder = OpenAIEmbeddings(
             api_key=self.api_key,
             base_url=self.base_url,
             model=self.model_name,
+            default_headers={"User-Agent": "curl/7.68.0"}
         )
         logger.info(
             f"SemanticAnswerSimilarity initialized — model: {self.model_name}"
@@ -169,49 +149,37 @@ class RagasEvaluationService:
        - Input: contexts + ground_truth (WAJIB diisi dengan jawaban pakar)
        - Tinggi = entitas kunci (nama, pasal, dll) dari referensi ditemukan di konteks
        
-    6. Noise Sensitivity (0-1): Mengukur apakah model terpengaruh oleh konteks yang tidak relevan (noise)
-       - Input: question + answer + contexts + ground_truth
-       - Rendah = model tidak mudah dipengaruhi noise, lebih baik
-       
-    ⚠️ PENTING: Metrik context_recall, context_entity_recall, dan noise_sensitivity memerlukan
-    ground_truth berupa jawaban pakar yang valid. Jika reference tidak dikirim, nilai metrik
-    tersebut tidak akan akurat.
     """
     
     def __init__(self):
-        # Konfigurasi Maiarouter API dari env
         self.api_key = os.getenv("OPENAI_API_KEY", "")
         self.base_url = os.getenv("OPENAI_BASE_URL", "")
         
-        # 1. Inisialisasi LLM Langchain
-        # Turunkan temperature ke 0.0 agar juri absolut dan tidak berubah-ubah
         langchain_llm = ChatOpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
-            model="openai/gpt-4o-mini",   # lebih cepat dari gpt-3.5-turbo-16k
+            model="openai/gpt-4o-mini",  
             temperature=0.0,
-            max_tokens=2000
+            max_tokens=2000,
+            default_headers={"User-Agent": "curl/7.68.0"}
         )
         
-        # 2. Inisialisasi Embeddings Langchain
         langchain_embeddings = OpenAIEmbeddings(
             api_key=self.api_key,
             base_url=self.base_url,
-            model="openai/text-embedding-3-large"
+            model="openai/text-embedding-3-large",
+            default_headers={"User-Agent": "curl/7.68.0"}
         )
         
-        # 3. WAJIB: Bungkus LLM dan Embeddings dengan Wrapper bawaan RAGAS agar format JSON tidak rusak
         self.custom_llm = LangchainLLMWrapper(langchain_llm)
         self.custom_embeddings = LangchainEmbeddingsWrapper(langchain_embeddings)
         
         # Metrik yang akan digunakan
-        # NoiseSensitivity dimatikan — terlalu lambat (banyak LLM call per sampel)
         self.metrics = [
-            faithfulness,        # Apakah jawaban didukung oleh konteks?
-            answer_relevancy,    # Apakah jawaban relevan dengan pertanyaan?
-            context_precision,   # Apakah konteks relevan dan presisi? (butuh ground_truth)
-            context_recall,      # Apakah konteks mencakup info di ground truth? (butuh ground_truth)
-            # NoiseSensitivity  # dimatikan sementara
+            faithfulness,        
+            answer_relevancy,   
+            context_precision,   
+            context_recall,     
         ]
         
         logger.info("RAGAS Evaluation Service initialized with wrappers")
@@ -223,21 +191,7 @@ class RagasEvaluationService:
         contexts: List[str],
         ground_truth: str = None
     ) -> Dict[str, Any]:
-        """
-        Evaluasi satu respons RAG
-        
-        Args:
-            question: Pertanyaan user
-            answer: Jawaban dari sistem RAG
-            contexts: List konteks yang diambil dari vector database
-            ground_truth: Ground truth answer (jawaban pakar/referensi yang valid).
-                          WAJIB diisi untuk hasil context_recall, context_entity_recall,
-                          dan noise_sensitivity yang akurat. Jika None, metrik-metrik
-                          tersebut tidak akan valid karena menggunakan jawaban LLM sebagai acuan.
-        
-        Returns:
-            Dictionary berisi hasil evaluasi semua metrik
-        """
+
         try:
             if ground_truth is None:
                 logger.warning(
@@ -246,7 +200,6 @@ class RagasEvaluationService:
                     "akan dilewati karena membutuhkan referensi jawaban pakar."
                 )
                 metrics_to_run = [faithfulness, answer_relevancy]
-                # Dataset tanpa ground_truth
                 data_sample = {
                     "question": [question],
                     "contexts": [contexts],
@@ -254,7 +207,6 @@ class RagasEvaluationService:
                 }
             else:
                 metrics_to_run = self.metrics
-                # Dataset lengkap dengan ground_truth
                 data_sample = {
                     "question": [question],
                     "contexts": [contexts],
@@ -266,7 +218,6 @@ class RagasEvaluationService:
             
             logger.info(f"🔍 Evaluating response for question: {question[:50]}...")
             
-            # Jalankan evaluasi
             evaluation_result = evaluate(
                 dataset=eval_dataset,
                 metrics=metrics_to_run,
@@ -274,11 +225,9 @@ class RagasEvaluationService:
                 embeddings=self.custom_embeddings
             )
             
-            # Konversi hasil ke dictionary
             df_results = evaluation_result.to_pandas()
             result_dict = df_results.iloc[0].to_dict()
             
-            # Format hasil RAGAS
             def get_metric_val(key):
                 val = result_dict.get(key)
                 if val is None or (isinstance(val, float) and np.isnan(val)):
@@ -290,10 +239,8 @@ class RagasEvaluationService:
                 "answer_relevancy":  get_metric_val("answer_relevancy"),
                 "context_precision": get_metric_val("context_precision"),
                 "context_recall":    get_metric_val("context_recall"),
-                # "noise_sensitivity": None,   # dimatikan sementara
             }
 
-            # Hitung Semantic Answer Similarity (SAS)
             if ground_truth is not None:
                 sas_score = sas_service.compute_sas(answer, ground_truth)
                 formatted_result["semantic_similarity"] = sas_score
@@ -302,10 +249,7 @@ class RagasEvaluationService:
                 formatted_result["semantic_similarity"] = None
                 logger.debug("SAS skipped because ground_truth is not provided.")
             
-            # Rata-rata dari seluruh metrik
-            # formatted_result["average_score"] = round(
-            #     sum(formatted_result.values()) / len(formatted_result), 4
-            # )
+
             
             logger.info(f"Evaluation completed: {formatted_result}")
             return formatted_result
@@ -318,7 +262,6 @@ class RagasEvaluationService:
                 "answer_relevancy":  0,
                 "context_precision": 0,
                 "context_recall":    0,
-                # "noise_sensitivity": None,
                 "semantic_similarity": 0,
             }
     
@@ -341,8 +284,5 @@ class RagasEvaluationService:
         
         return contexts
 
-# Singleton instances
-# sas_service dideklarasikan LEBIH DULU karena ragas_service.evaluate_single_response()
-# memanggilnya pada saat runtime (bukan saat class definition).
 sas_service = SemanticAnswerSimilarity()
 ragas_service = RagasEvaluationService()
