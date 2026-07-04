@@ -7,7 +7,6 @@ def get_user_by_id(user_id: int):
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # Sesuaikan query ini dengan struktur tabel users kamu
                 cur.execute("""
                     SELECT id, username, created_at 
                     FROM users 
@@ -16,7 +15,6 @@ def get_user_by_id(user_id: int):
                 
                 user = cur.fetchone()
                 
-                # Format datetime agar bisa di-parse jadi JSON
                 if user and user.get('created_at'):
                     user['created_at'] = user['created_at'].isoformat()
                     

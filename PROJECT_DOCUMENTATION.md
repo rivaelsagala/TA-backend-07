@@ -15,8 +15,8 @@ Peraturan Desa (Perdes) merupakan regulasi hukum yang mengatur kehidupan masyara
 ---
 
 > [!WARNING]
-> **CATATAN KETIDAKSESUAIAN DENGAN LAPORAN TA:** 
-> Di dalam Abstrak Laporan TA, disebutkan sistem menggunakan **FAISS** dan **sentence-transformer** dengan jumlah **16 dokumen** (atau 126 di abstrak Inggris). Namun, implementasi kode backend & dokumentasi ini menggunakan **Supabase (pgvector)** dan **OpenAI 	ext-embedding-3-large**. Anda HARUS merevisi Laporan TA Anda agar sesuai dengan implementasi kode sesungguhnya.
+> **CATATAN KETIDAKSESUAIAN DENGAN LAPORAN TA:**
+> Di dalam Abstrak Laporan TA, disebutkan sistem menggunakan **FAISS** dan **sentence-transformer** dengan jumlah **16 dokumen** (atau 126 di abstrak Inggris). Namun, implementasi kode backend & dokumentasi ini menggunakan **Supabase (pgvector)** dan **OpenAI ext-embedding-3-large**. Anda HARUS merevisi Laporan TA Anda agar sesuai dengan implementasi kode sesungguhnya.
 
 # Technology Stack
 
@@ -26,11 +26,11 @@ Peraturan Desa (Perdes) merupakan regulasi hukum yang mengatur kehidupan masyara
 | **Production Server**       | Gunicorn                                     | WSGI server untuk deployment produksi                                        |
 | **Vector Database**         | Supabase (pgvector)                          | Menyimpan embedding dokumen dan melakukan similarity search                  |
 | **Relational Database**     | PostgreSQL (via Supabase)                    | Menyimpan users, sesi chat, riwayat percakapan, dan metrik evaluasi          |
-| **Embedding Model**         | OpenAI `text-embedding-3-large`              | Mengubah teks dokumen/query menjadi vektor numerik (1536 dimensi)            |
+| **Embedding Model**         | OpenAI `text-embedding-3-large`              | Mengubah teks dokumen/query menjadi vektor numerik                           |
 | **LLM — Base Models**       | Llama 3.1 8B, Qwen2.5 7B, DeepSeek-R1 7B     | Model bahasa besar untuk generasi jawaban (via HuggingFace Router)           |
 | **LLM — OpenAI-Compatible** | GPT-4o-mini, GPT-3.5-turbo, Gemini 2.0 Flash | Model cloud via Maia Router API                                              |
 | **LLM — RAFT Model**        | `model_merged_raft_perdes`                   | Model fine-tuned khusus domain Perdes (di-host di B200 Server)               |
-| **Reranker**                | BAAI/bge-reranker-v2-m3 (HuggingFace)        | Cross-encoder untuk re-ranking dokumen hasil retrieval                       |
+| **Reranker**                | CrossEncoder`BAAI/bge-reranker-v2-m3`        | Cross-encoder untuk re-ranking dokumen hasil retrieval                       |
 | **PDF Extraction**          | PyMuPDF (fitz)                               | Ekstraksi teks dari file PDF berbasis teks                                   |
 | **OCR**                     | pytesseract + Pillow + OpenCV                | Ekstraksi teks dari PDF hasil scan (gambar)                                  |
 | **Orchestration**           | LangChain + LangChain-OpenAI                 | Orkestrasi pipeline RAG dan integrasi vector store                           |
@@ -707,7 +707,7 @@ Pipeline RAG yang berlapis dan sistematis: **Retrieval (k=20) → Re-ranking (k=
 
 ### 2. 📝 Legal Document-Aware Chunking (Semantic & Recursive)
 
-Chunking tidak dilakukan dengan ukuran karakter biasa (fixed-size), melainkan dengan **memahami struktur hukum dokumen** (BAB → Pasal → Ayat → Butir). Di dalam implementasi (meskipun di laporan TA disebutkan RecursiveCharacterTextSplitter), sistem menggunakan pendekatan hibrida *Semantic Legal-Aware Chunking* (_parse_perdes_sections). Setiap chunk merupakan satu unit logis peraturan yang atomic, sehingga retrieval lebih presisi dan jawaban dapat menyebut pasal secara spesifik.
+Chunking tidak dilakukan dengan ukuran karakter biasa (fixed-size), melainkan dengan **memahami struktur hukum dokumen** (BAB → Pasal → Ayat → Butir). Di dalam implementasi (meskipun di laporan TA disebutkan RecursiveCharacterTextSplitter), sistem menggunakan pendekatan hibrida _Semantic Legal-Aware Chunking_ (\_parse_perdes_sections). Setiap chunk merupakan satu unit logis peraturan yang atomic, sehingga retrieval lebih presisi dan jawaban dapat menyebut pasal secara spesifik.
 
 ### 3. 🔄 Query Rewriting untuk Follow-up Questions
 

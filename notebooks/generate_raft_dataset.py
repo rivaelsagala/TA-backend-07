@@ -83,7 +83,8 @@ supabase: Client = create_client(supabase_url, supabase_key)
 embeddings = OpenAIEmbeddings(
     model="openai/text-embedding-3-large",
     api_key=OPENAI_API_KEY,
-    base_url=os.getenv("OPENAI_BASE_URL", "")
+    base_url=os.getenv("OPENAI_BASE_URL", ""),
+    default_headers={"User-Agent": "curl/7.68.0"}
 )
 
 # Cross-Encoder untuk Re-ranking (same model as production RAG)
@@ -352,7 +353,8 @@ def call_llm(
     """Kirim request ke LLM API (OpenAI-compatible)."""
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "User-Agent": "curl/7.68.0"
     }
     payload = {
         "model": model,

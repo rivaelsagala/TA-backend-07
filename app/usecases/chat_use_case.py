@@ -18,11 +18,8 @@ def _get_recent_history(session_id: int, max_messages: int = MAX_HISTORY_MESSAGE
     Menggunakan SQL LIMIT agar tidak fetch semua rows dari database.
     """
     try:
-        # limit=5 rows dari DB = 10 messages (5 user + 5 assistant)
-        # Menghemat DB load: tidak fetch 200 rows jika hanya butuh 5
         max_pairs = max_messages // 2
         history = chat_service.get_formatted_chat_messages(session_id, limit=max_pairs)
-        # Safety net: jika limit tidak bekerja di SQL, truncate di Python
         if len(history) > max_messages:
             history = history[-max_messages:]
         return history
@@ -85,31 +82,16 @@ _OFF_TOPIC_KEYWORDS = {
 
 
 def is_off_topic(text: str) -> bool:
-    """
-    Deteksi apakah pertanyaan user di luar topik peraturan desa.
-    
-    Strategi:
-    - Jika query mengandung LEGAL keywords → BUKAN off-topic (biarkan RAG)
-    - Jika query mengandung OFF-TOPIC keywords DAN TIDAK ada legal keywords → OFF-TOPIC
-    - Jika tidak ada keduanya → BUKAN off-topic (biarkan RAG + confidence threshold)
-    
-    Pendekatan ini LEBIH AMAN (lenient): hanya memblokir yang jelas off-topic.
-    Pertanyaan ambigu tetap dilewatkan ke RAG, lalu confidence threshold
-    yang akan memfilter jika memang tidak relevan.
-    """
     lower_text = text.lower()
     
-    # Cek apakah ada legal keywords dalam query
     has_legal = any(kw in lower_text for kw in _LEGAL_KEYWORDS)
     if has_legal:
         return False
     
-    # Cek apakah ada off-topic keywords
     has_off_topic = any(kw in lower_text for kw in _OFF_TOPIC_KEYWORDS)
     if has_off_topic:
         return True
     
-    # Default: bukan off-topic (biarkan confidence threshold yang memfilter)
     return False
 
 def chat_with_history(session_id: int, user_id: int, user_question: str, model_id: int = 1, ground_truth: str = None, evaluate: bool = False) -> Tuple[Dict[str, Any], int]:
@@ -151,7 +133,7 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
         if not rag_result or not rag_result.get("answer"):
             return {"status": "error", "message": "Gagal mendapatkan respons dari sistem RAG"}, 500
         
-        # 4. Evaluasi RAGAS — hanya dijalankan jika evaluate=True
+        # Evaluasi RAGAS — hanya dijalankan jika evaluate=True
         evaluation_result = None
         if evaluate:
             logger.info(f"Starting RAGAS evaluation for model_id={model_id} (model={rag_result.get('model_used', 'Unknown')})...")
@@ -173,12 +155,11 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
         similarity_score = None
         sources = rag_result.get("sources", [])
         if sources and isinstance(sources, list) and isinstance(sources[0], dict):
-            # Mencari key 'score' atau 'similarity' dari metadata vector DB
             similarity_score = sources[0].get("score") or sources[0].get("similarity")
             if similarity_score is not None:
                 similarity_score = float(similarity_score)
 
-        # 6. Simpan Pertanyaan, Jawaban, dan Metrik ke dalam PostgreSQL (chat_history)
+        # Simpan Pertanyaan, Jawaban, dan Metrik ke dalam PostgreSQL (chat_history)
         metadata = {
             "sources": sources,
             "model_used": rag_result.get("model_used", "Unknown Model"),
@@ -201,20 +182,17 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
         # cleaned_sources = [{"content": src.get("content")} if isinstance(src, dict) else src for src in sources]
 
 
-        # Sertakan metadata, expanded_content, dan neighbor_chunks beserta content di dalam sources untuk API response
         cleaned_sources = []
         for src in sources:
             if isinstance(src, dict):
-                src_data = {"content": src.get("content"), "metadata": src.get("metadata")}
-                if "expanded_content" in src:
-                    src_data["expanded_content"] = src["expanded_content"]
-                if "neighbor_chunks" in src:
-                    src_data["neighbor_chunks"] = src["neighbor_chunks"]
+                src_data = {
+                    "content": src.get("content"), 
+                    "metadata": src.get("metadata")
+                }
                 cleaned_sources.append(src_data)
             else:
                 cleaned_sources.append(src)
 
-        # Build response
         response_body = {
             "status": "success",
             "message": "Jawaban berhasil diproses",
@@ -226,7 +204,6 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             "inference_time": rag_result.get("inference_time")
         }
         
-        # Tambahkan field analysis hanya jika ada (model RAFT)
         if rag_result.get("analysis"):
             response_body["analysis"] = rag_result["analysis"]
         
@@ -236,11 +213,9 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
         error_msg = str(e).lower()
         logger.error(f"Error in chat_with_history: {error_msg}")
         
-        # Deteksi spesifik untuk Timeout
         if "timeout" in error_msg:
             return {"status": "error", "message": "Proses inferensi atau pencarian terlalu lama (Request Timeout)."}, 408
             
-        # Deteksi kegagalan koneksi (misal ke Vector DB atau API LLM)
         if "unauthorized" in error_msg or "invalid username or password" in error_msg:
             return {"status": "error", "message": "Gagal terhubung ke layanan AI (Unauthorized). Periksa API Key."}, 401
             
