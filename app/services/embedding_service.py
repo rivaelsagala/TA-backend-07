@@ -12,7 +12,7 @@ supabase: Client = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPAB
 embeddings = OpenAIEmbeddings(
     model=os.getenv("EMBEDDING_MODEL", "openai/text-embedding-3-large"),
     api_key=os.getenv("OPENAI_API_KEY", ""),
-    base_url=os.getenv("OPENAI_BASE_URL", "https://api.maiarouter.ai/v1"),
+    base_url=os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1"),
     default_headers={"User-Agent": "curl/7.68.0"}
 )
 

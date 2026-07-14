@@ -40,7 +40,6 @@ AVAILABLE_MODELS = {
 
 # 3. HUGGINGFACE SERVICE (LLM Multi-Model Support)
 class HuggingFaceService:
-    """Service untuk berinteraksi dengan HuggingFace Router API dan Fine-tuned Model"""
     
     def __init__(self):
         self.api_url = os.getenv("HF_BASE_URL", "")
@@ -49,7 +48,7 @@ class HuggingFaceService:
         self.finetuned_api_url = os.getenv("FINETUNED_API_URL", "")
         
         self.temperature = 0.0
-        self.max_tokens = 2000
+        self.max_tokens = 4096
         
         self.headers = {
             "Authorization": f"Bearer {self.token}",
@@ -84,7 +83,7 @@ class HuggingFaceService:
             model_type = model_info.get("type", "original")
             
             if model_type == "raft":
-                api_url = f"{self.finetuned_api_url}/chat-rag"
+                api_url = f"{self.finetuned_api_url}/chat-raft"
                 logger.debug(f"RAFT model: {model_info['name']}")
                 
                 user_message = ""
@@ -98,8 +97,8 @@ class HuggingFaceService:
                     logger.warning("raw_doc_chunks kosong untuk RAFT model! Model tidak akan punya konteks dokumen.")
                 
                 payload = {
-                    "pertanyaan": user_message,
-                    "dokumen": raw_doc_chunks
+                    "question": user_message,
+                    "documents": raw_doc_chunks
                 }
                 
                 logger.debug(f"Sending RAFT request to B200: {api_url}")
@@ -115,22 +114,21 @@ class HuggingFaceService:
                 response.raise_for_status()
                 result = response.json()
                 
-                # Standardisasi format response agar konsisten dengan model lain
                 standardized_result = {
                     "choices": [
                         {
                             "message": {
-                                "content": result.get("jawaban", "")
+                                "content": result.get("answer", "")
                             }
                         }
                     ],
-                    # Metadata tambahan khusus RAFT — analisis dokumen & raw response
                     "raft_metadata": {
-                        "analisis": result.get("analisis", ""),
-                        "raw_response": result.get("raw_response", ""),
-                        "num_documents": result.get("num_documents", 0),
-                        "model_type": result.get("model_type", "raft"),
-                        "pertanyaan": result.get("pertanyaan", ""),
+                        "analisis": result.get("thought", ""),
+                        "konteks_dipilih": result.get("konteks_dipilih", ""),
+                        "konteks_ditolak": result.get("konteks_ditolak", ""),
+                        "num_documents": result.get("documents_count", 0),
+                        "model_type": "raft",
+                        "pertanyaan": result.get("question", ""),
                     }
                 }
                 
@@ -140,11 +138,11 @@ class HuggingFaceService:
 
 
             elif model_type == "openai":
-                base_url = os.getenv("OPENAI_BASE_URL", "https://api.maiarouter.ai/v1").rstrip('/')
+                base_url = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1").rstrip('/')
                 api_url = f"{base_url}/chat/completions"
                 api_key = os.getenv("OPENAI_API_KEY", "")
                 
-                logger.debug(f"Using MAIA ROUTER model: {model_info['name']}")
+                logger.debug(f"Using OPENROUTER model: {model_info['name']}")
                 
                 payload = {
                     "model": model_info["name"],
@@ -158,7 +156,7 @@ class HuggingFaceService:
                     "Content-Type": "application/json"
                 }
                 
-                logger.debug(f"Sending request to Maia Router: {api_url}")
+                logger.debug(f"Sending request to OpenRouter: {api_url}")
                 response = requests.post(
                     api_url,
                     headers=headers,
@@ -168,7 +166,7 @@ class HuggingFaceService:
                 response.raise_for_status()
                 result = response.json()
                 
-                logger.info("Maia Router API response successful")
+                logger.info("OpenRouter API response successful")
                 return result
                 
             else:
@@ -208,7 +206,7 @@ class HuggingFaceService:
                     logger.error(f"Error response text: {e.response.text}")
             return None
         except Exception as e:
-            logger.error(f"❌ Unexpected error in query(): {str(e)}")
+            logger.error(f"Unexpected error in query(): {str(e)}")
             return None
     
     def get_completion(self, messages: List[Dict[str, str]], model_id: int = 1, **kwargs) -> Optional[str]:
@@ -390,110 +388,6 @@ def rewrite_query_with_history(
         return original_query
 
 
-# ==========================================
-# ADJACENT CHUNK EXPANSION
-# ==========================================
-def fetch_adjacent_chunks(
-    reranked_docs: list,
-    window: int = 1
-) -> dict:
-    table_name = os.getenv("SUPABASE_TABLE_NAME", "documents")
-    adjacent_map = {}  
-    
-    # STEP 1: Kumpulkan semua (document_id, chunk_index) yang perlu di-fetch
-    needed_keys = set() 
-    doc_chunk_pairs = []  
-    
-    for doc in reranked_docs:
-        doc_id = doc.metadata.get("document_id")
-        chunk_idx = doc.metadata.get("chunk_index")
-        
-        if not doc_id or chunk_idx is None:
-            doc_chunk_pairs.append((None, None))
-            continue
-        
-        chunk_idx = int(chunk_idx)
-        doc_chunk_pairs.append((doc_id, chunk_idx))
-        
-        for offset in range(1, window + 1):
-            adj_idx = chunk_idx - offset
-            if adj_idx >= 1:  
-                needed_keys.add((doc_id, adj_idx))
-        
-        for offset in range(1, window + 1):
-            adj_idx = chunk_idx + offset
-            needed_keys.add((doc_id, adj_idx))
-    
-    if not needed_keys:
-        logger.info("Adjacent Chunk Expansion: tidak ada chunk_index di metadata, skip.")
-        return {}
-    
-    # STEP 2: Batch query ke Supabase
-    adjacent_lookup = {}  
-    doc_ids = set(doc_id for doc_id, _ in needed_keys)
-    
-    try:
-        for doc_id in doc_ids:
-            indices_for_doc = [idx for did, idx in needed_keys if did == doc_id]
-            if not indices_for_doc:
-                continue
-            
-            min_idx = min(indices_for_doc)
-            max_idx = max(indices_for_doc)
-            
-            idx_strings = [str(i) for i in range(min_idx, max_idx + 1)]
-            result = (
-                supabase
-                .table(table_name)
-                .select("content, metadata")
-                .eq("metadata->>document_id", doc_id)
-                .in_("metadata->>chunk_index", idx_strings)
-                .execute()
-            )
-            
-            for row in result.data:
-                meta = row.get("metadata", {})
-                row_doc_id = meta.get("document_id", "")
-                row_chunk_idx = meta.get("chunk_index")
-                if row_chunk_idx is not None:
-                    key = (row_doc_id, int(row_chunk_idx))
-                    adjacent_lookup[key] = row.get("content", "")
-        
-        logger.info(
-            f"Adjacent Chunk Expansion: fetched {len(adjacent_lookup)} neighboring chunks "
-            f"from {len(doc_ids)} document(s) (window={window})"
-        )
-    
-    except Exception as e:
-        logger.warning(f"Adjacent Chunk Expansion gagal: {e}. Lanjut tanpa ekspansi.")
-        return {}
-    
-    # STEP 3: Bangun adjacent_map untuk setiap reranked chunk
-    for doc_id, chunk_idx in doc_chunk_pairs:
-        if doc_id is None:
-            continue
-        
-        map_key = (doc_id, chunk_idx)
-        before_contents = []
-        after_contents = []
-        
-        for offset in range(window, 0, -1):
-            adj_key = (doc_id, chunk_idx - offset)
-            if adj_key in adjacent_lookup:
-                before_contents.append(adjacent_lookup[adj_key])
-        
-        for offset in range(1, window + 1):
-            adj_key = (doc_id, chunk_idx + offset)
-            if adj_key in adjacent_lookup:
-                after_contents.append(adjacent_lookup[adj_key])
-        
-        if before_contents or after_contents:
-            adjacent_map[map_key] = {
-                "before": before_contents,
-                "after": after_contents
-            }
-    
-    return adjacent_map
 
 
 def _build_expanded_context_block(
@@ -543,8 +437,7 @@ def evaluate_rag_answer(query: str, context: str, answer: str) -> dict:
     )
     messages = [{"role": "system", "content": eval_prompt}]
     try:
-        # Memanggil API LLM secara langsung (menggunakan gpt-4o-mini)
-        base_url = os.getenv("OPENAI_BASE_URL", "https://api.maiarouter.ai/v1").rstrip('/')
+        base_url = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1").rstrip('/')
         api_url = f"{base_url}/chat/completions"
         api_key = os.getenv("OPENAI_API_KEY", "")
         
@@ -566,6 +459,8 @@ def evaluate_rag_answer(query: str, context: str, answer: str) -> dict:
         result = response.json()
         if "choices" in result and len(result["choices"]) > 0:
             content = result["choices"][0]["message"]["content"]
+            if not isinstance(content, str):
+                content = str(content)
             match = re.search(r'\{[\s\S]*\}', content)
             if match:
                 return json.loads(match.group())
@@ -580,8 +475,14 @@ def _extract_final_answer(text: str) -> str:
     ambil hanya teks setelah penanda [JAWABAN AKHIR] (case-insensitive, multi-format).
     Jika tidak ada penanda, kembalikan teks asli.
     """
+    if not isinstance(text, str):
+        try:
+            import json
+            text = json.dumps(text, ensure_ascii=False)
+        except Exception:
+            text = str(text) if text is not None else ""
+            
     import re as _re
-    # Cari berbagai varian penanda jawaban akhir
     pattern = _re.compile(
         r'\[JAWABAN AKHIR\]|\*\*\[JAWABAN AKHIR\]\*\*|\*\*JAWABAN AKHIR\*\*|JAWABAN AKHIR\s*:',
         _re.IGNORECASE
@@ -589,13 +490,11 @@ def _extract_final_answer(text: str) -> str:
     match = pattern.search(text)
     if match:
         extracted = text[match.end():].strip()
-        # Hilangkan baris kosong berlebih di awal
         return extracted.lstrip('\n').strip()
     return text.strip()
 
 
 def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[str, str]] = None) -> dict:
-    """Full pipeline RAG: Query Rewriting → Retrieval → Reranking → Adjacent Expansion → Generation."""
     supabase_table = os.getenv("SUPABASE_TABLE_NAME", "")
     
     # ==========================================
@@ -733,10 +632,14 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
 
 
     raft_analysis = None
+    konteks_dipilih = None
+    konteks_ditolak = None
     if raft_metadata_holder is not None:
         raft_analysis = raft_metadata_holder.get("analisis")
+        konteks_dipilih = raft_metadata_holder.get("konteks_dipilih")
+        konteks_ditolak = raft_metadata_holder.get("konteks_ditolak")
 
-    # LLM-as-a-Judge
+
     logger.info("Mengevaluasi jawaban dengan LLM-as-a-Judge...")
     eval_context = context_joined if context_joined else "\n".join(raw_doc_chunks)
     judge_evaluation = evaluate_rag_answer(query, eval_context, final_answer)
@@ -747,81 +650,9 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
         "model_used": model_info["name"],
         "confidence_score": top_score,
         "analysis": raft_analysis,
+        "konteks_dipilih": konteks_dipilih,
+        "konteks_ditolak": konteks_ditolak,
         "judge_evaluation": judge_evaluation,
         "retrieval_time": retrieval_time,
         "inference_time": inference_time
-    }
-
-
-def test_retrieval(query: str, top_k: int = 5, initial_k: int = 20) -> dict:
-    supabase_table = os.getenv("SUPABASE_TABLE_NAME", "")
-    
-    t0 = time.time()
-    
-    vector_store = SupabaseVectorStore(
-        client=supabase,
-        embedding=embeddings,
-        table_name=supabase_table,
-        query_name="match_documents"
-    )
-    
-    logger.info(f"[Test Retrieval] Mengambil top-{initial_k} dokumen awal untuk query: \"{query[:80]}...\"")
-    initial_docs = vector_store.similarity_search(query, k=initial_k)
-    
-    t1_vector = time.time()
-    vector_search_time = t1_vector - t0
-    
-    logger.info(f"[Test Retrieval] Re-ranking {len(initial_docs)} → top {top_k}...")
-    reranked_docs, top_score = rerank_documents(query=query, documents=initial_docs, top_k=top_k)
-    
-    logger.info("[Test Retrieval] Adjacent Chunk Expansion (window=3)...")
-    adjacent_map = fetch_adjacent_chunks(reranked_docs, window=3)
-    
-    t2_rerank = time.time()
-    reranking_time = t2_rerank - t1_vector
-    total_time = t2_rerank - t0
-    
-    retrieved_documents = []
-    for rank, doc in enumerate(reranked_docs, start=1):
-        metadata = doc.metadata
-        
-        doc_id = metadata.get("document_id")
-        chunk_idx = metadata.get("chunk_index")
-        map_key = (doc_id, int(chunk_idx)) if doc_id and chunk_idx is not None else None
-        adj = adjacent_map.get(map_key) if map_key else None
-        
-        expanded_content = _build_expanded_context_block(doc, adjacent_map)
-
-        retrieved_documents.append({
-            "rank": rank,
-            "content": doc.page_content,
-            "metadata": {
-                "source": metadata.get("source", "Unknown"),
-                "page": metadata.get("page", "?"),
-                "title": metadata.get("title", "Unknown"),
-                "village_name": metadata.get("village_name", ""),
-                "regency_name": metadata.get("regency_name", ""),
-                "perdes_number": metadata.get("perdes_number", ""),
-                "perdes_year": metadata.get("perdes_year", ""),
-                "document_id": metadata.get("document_id", ""),
-                "chunk_index": metadata.get("chunk_index", ""),
-            }
-        })
-    
-    logger.info(
-        f"[Test Retrieval] Selesai — {len(retrieved_documents)} dokumen retrieved, "
-        f"top_score={top_score:.4f}, total_time={total_time:.2f}s"
-    )
-    
-    return {
-        "query": query,
-        "top_score": top_score,
-        "num_initial_candidates": len(initial_docs),
-        "num_reranked": len(retrieved_documents),
-        "retrieved_documents": retrieved_documents,
-        "timing": {
-            "vector_search_seconds": round(vector_search_time, 3),
-            "reranking_seconds": round(reranking_time, 3),
-            "total_seconds": round(total_time, 3),
-        }
     }
