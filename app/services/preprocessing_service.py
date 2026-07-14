@@ -346,7 +346,7 @@ def extract_text_from_pdf(file_path: str):
     
     enriched_text = f"{context_header}\n\n{clean_text}"
     
-    raw_output_dir = os.path.join(os.getcwd(), 'data', 'processed', "distraktor")
+    raw_output_dir = os.path.join(os.getcwd(), 'data', 'processed', "data")
     os.makedirs(raw_output_dir, exist_ok=True)
     canonical_base = _canonical_output_basename(file_path)
     raw_path = os.path.join(raw_output_dir, f"{canonical_base}_raw.txt")
@@ -667,7 +667,7 @@ def chunk_documents(documents: list):
     return all_chunks
 
 def save_results_to_folder(file_path: str, extracted_docs: list, chunks: list):
-    output_dir = os.path.join(os.getcwd(), 'data', 'processed' , "distraktor")
+    output_dir = os.path.join(os.getcwd(), 'data', 'processed')
     os.makedirs(output_dir, exist_ok=True)
 
     canonical_base = _canonical_output_basename(file_path)

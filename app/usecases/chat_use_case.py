@@ -110,20 +110,14 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             rag_result = {"answer": answer, "sources": [], "model_used": "OffTopicFilter"}
 
         else:
-            # [NONAKTIF] Pengambilan history dari DB dimatikan sementara
-            # karena koneksi ke PostgreSQL remote (Render) sering timeout.
-            # Aktifkan kembali dengan menghapus komentar di bawah ini:
-            # -----------------------------------------------------------
-            # if evaluate:
-            #     recent_history = []
-            #     logger.info("Bypassing DB chat history (evaluate=True)")
-            # else:
-            #     recent_history = _get_recent_history(session_id)
-            #     logger.info(f"Sending {len(recent_history)} history messages to RAG")
-            # -----------------------------------------------------------
-            recent_history = []
-            logger.info("[SKIP] DB chat history dinonaktifkan (cegah connection timeout PostgreSQL remote)")
-            
+            if evaluate:
+                recent_history = []
+                logger.info("Bypassing DB chat history (evaluate=True)")
+            else:
+                recent_history = _get_recent_history(session_id)
+                logger.info(f"Sending {len(recent_history)} history messages to RAG")
+            # recent_history = []
+            # logger.info("[SKIP] DB chat history dinonaktifkan (cegah connection timeout PostgreSQL remote)")
             rag_result = get_answer_from_rag(
                 user_question,
                 model_id=model_id,
@@ -166,20 +160,15 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             "analysis": rag_result.get("analysis")  # RAFT thought_process
         }
         
-        # ── SEMENTARA DIMATIKAN untuk mempercepat evaluasi batch RAGAS ──────────
-        # Aktifkan kembali setelah evaluasi selesai dengan menghapus komentar di bawah
-        # chat_service.save_chat_message(
-        #     session_id=session_id,
-        #     user_id=user_id,
-        #     user_query=user_question,
-        #     llm_response=rag_result["answer"],
-        #     metadata=metadata,
-        #     evaluation=evaluation_result,
-        # )
+        chat_service.save_chat_message(
+            session_id=session_id,
+            user_id=user_id,
+            user_query=user_question,
+            llm_response=rag_result["answer"],
+            metadata=metadata,
+            evaluation=evaluation_result,
+        )
         logger.info("[SKIP] save_chat_message dimatikan sementara (mode evaluasi batch)")
-        
-        # # Remove metadata from sources for cleaner API response
-        # cleaned_sources = [{"content": src.get("content")} if isinstance(src, dict) else src for src in sources]
 
 
         cleaned_sources = []
@@ -206,6 +195,10 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
         
         if rag_result.get("analysis"):
             response_body["analysis"] = rag_result["analysis"]
+        if rag_result.get("konteks_dipilih"):
+            response_body["konteks_dipilih"] = rag_result["konteks_dipilih"]
+        if rag_result.get("konteks_ditolak"):
+            response_body["konteks_ditolak"] = rag_result["konteks_ditolak"]
         
         return response_body, 200
 

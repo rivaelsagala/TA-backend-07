@@ -23,7 +23,6 @@ def handle_generate_embedding():
         
         file.save(filepath)
         
-        # Panggil usecase dengan parameter save_to_db
         result = ingest_pdf_to_vector_db(filepath, filename, save_to_db)
         
         if os.path.exists(filepath):
