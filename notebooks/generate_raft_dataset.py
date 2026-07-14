@@ -1,19 +1,3 @@
-"""
-RAFT Dataset Generator — Retrieval-Grounded (V2)
-=================================================
-Pendekatan baru yang menyelaraskan distribusi training dengan distribusi inference.
-
-Pipeline (self-contained, TIDAK butuh Flask backend):
-  Question → Supabase Vector DB (Top-20) → CrossEncoder Re-ranking (Top-5)
-  Question + Top-5 → LLM (System Prompt RAFT) → JSON RAFT Entry
-
-Setiap entry berisi:
-  - instruction: pertanyaan asli
-  - documents: 5 dokumen hasil retrieval (apa adanya)
-  - thought_process: analisis per-dokumen + ringkasan sintesis
-  - completion: jawaban akhir yang 100% grounded pada documents
-"""
-
 import os, sys, json, time, re
 from datetime import datetime
 from pathlib import Path
@@ -23,30 +7,24 @@ import requests
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SETUP & KONFIGURASI
-# ─────────────────────────────────────────────────────────────────────────────
-
 PROJECT_ROOT = Path.cwd().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
-# LLM API Config (via Maia Router / OpenAI-compatible endpoint)
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 _base = os.getenv("OPENAI_BASE_URL", "").rstrip("/")
 LLM_API_URL = f"{_base}/chat/completions" if not _base.endswith("/chat/completions") else _base
 
-# Model & Generation Settings
 GENERATOR_MODEL = "openai/gpt-4o-mini"
 MAX_TOKENS = 2048
-REQUEST_DELAY = 0.001  # detik delay antar request untuk menghindari rate-limit
+REQUEST_DELAY = 0.001  
 
-# Retrieval Settings
-INITIAL_K = 10   # Jumlah dokumen awal dari vector search
-FINAL_K = 5      # Jumlah dokumen final setelah re-ranking
-CONFIDENCE_THRESHOLD = -5.0  # Jika top_score di bawah ini, dokumen dianggap tidak relevan dan di-skip
 
-# Daftar document_id yang di-filter / tidak diambil saat retrieval (sebagai distraktor)
+INITIAL_K = 10  
+FINAL_K = 5     
+CONFIDENCE_THRESHOLD = -5.0  
+
 EXCLUDED_DOCUMENT_IDS = [
     "perdes_dis_mekarrahayu_05_2016",
     "perdes_dis_padamukti_2_2018",
@@ -60,26 +38,19 @@ EXCLUDED_DOCUMENT_IDS = [
     "perdes_dismajasetra_1_2018"
 ]
 
-# Output
 DATASET_DIR = PROJECT_ROOT / "data" / "dataset"
 DATASET_DIR.mkdir(parents=True, exist_ok=True)
-
-# ─────────────────────────────────────────────────────────────────────────────
-# INISIALISASI RETRIEVAL PIPELINE (Supabase + Embeddings + CrossEncoder)
-# ─────────────────────────────────────────────────────────────────────────────
 
 from supabase import create_client, Client
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
 from sentence_transformers import CrossEncoder
 
-# Supabase
 supabase_url = os.getenv("SUPABASE_URL", "")
 supabase_key = os.getenv("SUPABASE_KEY", "")
 supabase_table = os.getenv("SUPABASE_TABLE_NAME", "documents")
 supabase: Client = create_client(supabase_url, supabase_key)
 
-# Embeddings (same model as production RAG)
 embeddings = OpenAIEmbeddings(
     model="openai/text-embedding-3-large",
     api_key=OPENAI_API_KEY,
@@ -87,29 +58,17 @@ embeddings = OpenAIEmbeddings(
     default_headers={"User-Agent": "curl/7.68.0"}
 )
 
-# Cross-Encoder untuk Re-ranking (same model as production RAG)
 RERANKER_MODEL_NAME = 'cross-encoder/ms-marco-MiniLM-L6-v2'
 print(f"Memuat Cross-Encoder ({RERANKER_MODEL_NAME})...")
 cross_encoder = CrossEncoder(RERANKER_MODEL_NAME, max_length=512)
 print("Cross-Encoder berhasil dimuat!")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DAFTAR PERTANYAAN
-# ─────────────────────────────────────────────────────────────────────────────
-# Tambahkan pertanyaan di sini. Setiap pertanyaan akan di-retrieve secara real
-# melalui pipeline RAG (Vector DB → Top-20 → Reranking → Top-5).
-# Pengaturan Batasan Jumlah Pertanyaan
-MAX_QUESTIONS: int = None  # Set ke None jika ingin memproses semua pertanyaan (misal: MAX_QUESTIONS = None)
+MAX_QUESTIONS: int = None
 
 QUESTIONS: List[str] = [
-    # ── Contoh pertanyaan — ganti/tambah sesuai kebutuhan ──
     "Apa sih yang dimaksud dengan pemerintahan desa di desa Mekarrahayu?",
 ]
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SYSTEM PROMPT RAFT
-# ─────────────────────────────────────────────────────────────────────────────
 
 RAFT_SYSTEM_PROMPT = """Anda adalah AI yang bertugas membuat dataset untuk Retrieval-Augmented Fine-Tuning (RAFT).
 
@@ -129,9 +88,9 @@ Top-20 Retrieval
 Re-ranking
       │
       ▼
-Top-5 Documents
+Retrieved Documents
 
-Documents yang diberikan merupakan hasil Top-5 setelah proses re-ranking dan merupakan satu-satunya sumber informasi (Single Source of Truth).
+Documents yang diberikan merupakan hasil retrieval setelah proses re-ranking dan merupakan satu-satunya sumber informasi (Single Source of Truth).
 
 Tugas
 
@@ -177,7 +136,7 @@ Jangan mengarang.
 Jangan menambahkan fakta baru.
 Jangan membuat asumsi.
 Jangan menggunakan informasi di luar Documents.
-Sintesis informasi relevan dari Top-5 Documents HANYA JIKA dokumen-dokumen tersebut membahas subjek yang sama.
+Sintesis informasi relevan dari Retrieved Documents HANYA JIKA dokumen-dokumen tersebut membahas subjek yang sama.
 PENTING - SANGAT KETAT (ANTI CONTEXT-MIXING): Jika instruksi/pertanyaan secara eksplisit menyebutkan NOMOR PERATURAN tertentu (misal: No. 10 Tahun 2016), maka dokumen yang memiliki Nomor Peraturan BERBEDA (misal: No. 05 Tahun 2016) ADALAH SAMPAH (TIDAK RELEVAN) dan WAJIB DIABAIKAN. Tolak dokumen tersebut secara eksplisit di thought_process dan JANGAN PERNAH memasukkan isinya ke dalam completion! Anda HANYA boleh menggunakan dokumen yang persis sesuai dengan spesifikasi (Nama Desa DAN Nomor Peraturan).
 Apabila terdapat konflik, gunakan informasi yang paling konsisten dengan mayoritas dokumen (kecuali pertanyaan mensyaratkan dokumen spesifik).
 Apabila tidak ada informasi yang menjawab pertanyaan, jawab:
@@ -212,45 +171,26 @@ Format yang harus dihasilkan adalah:
     "document_analysis": [
       {
         "document": 1,
-        "analysis": "..."
+        "analysis": "<analisis dokumen 1>"
       },
       {
         "document": 2,
-        "analysis": "..."
-      },
-      {
-        "document": 3,
-        "analysis": "..."
-      },
-      {
-        "document": 4,
-        "analysis": "..."
-      },
-      {
-        "document": 5,
-        "analysis": "..."
+        "analysis": "<analisis dokumen 2>"
       }
     ],
-    "summary": "Ringkasan sintesis seluruh dokumen."
+    "summary": "<ringkasan sintesis seluruh dokumen>"
   },
   "completion": "<jawaban akhir>"
 }
 
-Pastikan JSON valid sehingga setiap output dapat langsung disimpan sebagai satu baris (.jsonl) tanpa proses konversi tambahan."""
+Pastikan JSON valid sehingga setiap output dapat langsung disimpan sebagai satu baris (.jsonl) tanpa proses konversi tambahan.
+PENTING:
+- Hasilkan obyek di dalam `document_analysis` sebanyak jumlah dokumen yang diberikan. Jika ada 4 dokumen, hasilkan 4 obyek. JANGAN pernah menuliskan `...` atau komentar di dalam JSON.
+- Jangan ada trailing comma."""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# FUNGSI RETRIEVAL (Self-contained — TIDAK butuh Flask backend)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def rerank_documents(query: str, documents: list, top_k: int = FINAL_K) -> Tuple[list, float]:
-    """
-    Re-ranking menggunakan MS Marco Cross-Encoder.
-    Identik dengan app/services/reranker_service.py.
-    
-    Returns:
-        Tuple (reranked_docs, top_score)
-    """
     if not documents:
         return [], 0.0
     
@@ -261,7 +201,6 @@ def rerank_documents(query: str, documents: list, top_k: int = FINAL_K) -> Tuple
     reranked = [doc for doc, _ in scored_docs[:top_k]]
     top_score = float(scored_docs[0][1]) if scored_docs else 0.0
     
-    # Log top scores
     for rank, (doc, score) in enumerate(scored_docs[:top_k]):
         src = doc.metadata.get("source", "?")
         print(f"    Rank {rank+1} | Score: {score:.4f} | {src}")
@@ -270,19 +209,7 @@ def rerank_documents(query: str, documents: list, top_k: int = FINAL_K) -> Tuple
 
 
 def retrieve_top5_documents(question: str) -> Optional[List[str]]:
-    """
-    Pipeline retrieval self-contained:
-      1. Vector Search pada Supabase (K=20)
-      2. Re-ranking via CrossEncoder (K=5)
-    
-    Menggunakan komponen yang IDENTIK dengan production RAG pipeline
-    (app/services/rag_service.py + app/services/reranker_service.py).
-    
-    Returns:
-        List of 5 document content strings, atau None jika gagal.
-    """
     try:
-        # 1. Setup Vector Store
         vector_store = SupabaseVectorStore(
             client=supabase,
             embedding=embeddings,
@@ -290,10 +217,8 @@ def retrieve_top5_documents(question: str) -> Optional[List[str]]:
             query_name="match_documents"
         )
         
-        # 2. Vector Search — Mengambil lebih banyak untuk mengantisipasi filtering
         raw_initial_docs = vector_store.similarity_search(question, k=INITIAL_K + len(EXCLUDED_DOCUMENT_IDS))
-        
-        # Filter out excluded document IDs
+
         initial_docs = []
         for doc in raw_initial_docs:
             doc_id = doc.metadata.get("document_id", "")
@@ -326,10 +251,6 @@ def retrieve_top5_documents(question: str) -> Optional[List[str]]:
         # 4. Ekstrak konten mentah
         doc_contents = [doc.page_content for doc in reranked_docs]
         
-        # Padding jika kurang dari 5 (edge case)
-        while len(doc_contents) < 5:
-            doc_contents.append("[Dokumen tidak tersedia]")
-        
         return doc_contents[:5]
         
     except Exception as e:
@@ -338,10 +259,6 @@ def retrieve_top5_documents(question: str) -> Optional[List[str]]:
         traceback.print_exc()
         return None
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# FUNGSI LLM
-# ─────────────────────────────────────────────────────────────────────────────
 
 def call_llm(
     messages: List[Dict],
@@ -379,10 +296,6 @@ def call_llm(
     return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# FUNGSI PARSING & VALIDASI
-# ─────────────────────────────────────────────────────────────────────────────
-
 def parse_raft_json(raw_response: str) -> Optional[Dict]:
     """
     Parse response LLM menjadi JSON RAFT yang valid.
@@ -392,28 +305,35 @@ def parse_raft_json(raw_response: str) -> Optional[Dict]:
     if not raw_response:
         return None
     
-    # Bersihkan markdown fence jika ada
     cleaned = raw_response.strip()
     cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
     cleaned = re.sub(r'\s*```$', '', cleaned)
     cleaned = cleaned.strip()
     
-    # Attempt 1: Parse langsung
+    # Hapus trailing comma agar JSONDecodeError tidak terjadi akibat koma berlebih
+    cleaned = re.sub(r',\s*}', '}', cleaned)
+    cleaned = re.sub(r',\s*\]', ']', cleaned)
+    
     try:
         data = json.loads(cleaned)
         if validate_raft_structure(data):
             return data
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        print(f"  [WARN] JSONDecodeError di attempt pertama: {e}")
         pass
-    
-    # Attempt 2: Cari JSON object terbesar dalam response
+
     try:
         match = re.search(r'\{[\s\S]*\}', cleaned)
         if match:
             data = json.loads(match.group())
             if validate_raft_structure(data):
                 return data
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        print(f"  [WARN] JSONDecodeError di attempt kedua: {e}")
+        # Simpan raw response ke file untuk diinspeksi
+        with open("failed_response.txt", "w", encoding="utf-8") as f:
+            f.write(cleaned)
+        print("  [DEBUG] Raw LLM Response disimpan di failed_response.txt")
         pass
     
     return None
@@ -427,7 +347,6 @@ def validate_raft_structure(data: Dict) -> bool:
         print(f"  [WARN] Missing keys: {missing}")
         return False
     
-    # Validasi thought_process memiliki document_analysis dan summary
     tp = data["thought_process"]
     if isinstance(tp, dict):
         if "document_analysis" not in tp or "summary" not in tp:
@@ -439,8 +358,7 @@ def validate_raft_structure(data: Dict) -> bool:
     else:
         print("  [WARN] 'thought_process' bukan dict")
         return False
-    
-    # Validasi completion tidak kosong
+
     if not data.get("completion", "").strip():
         print("  [WARN] 'completion' kosong")
         return False
@@ -448,28 +366,12 @@ def validate_raft_structure(data: Dict) -> bool:
     return True
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PIPELINE UTAMA
-# ─────────────────────────────────────────────────────────────────────────────
-
 def generate_single_raft_entry(question: str, documents: List[str], max_attempts: int = 3) -> Optional[Dict]:
-    """
-    Generate satu entry RAFT dari pertanyaan + Top-5 documents.
-    
-    Args:
-        question: Pertanyaan yang sudah di-retrieve
-        documents: List of 5 document strings dari retrieval pipeline
-        max_attempts: Jumlah retry jika LLM menghasilkan output yang tidak valid
-    
-    Returns:
-        Dict RAFT entry yang valid, atau None jika gagal setelah semua attempts.
-    """
-    # Bangun user message: pertanyaan + dokumen
     docs_formatted = "\n\n".join(
         f"--- Dokumen {i+1} ---\n{doc}" for i, doc in enumerate(documents)
     )
     
-    user_message = f"Pertanyaan:\n{question}\n\nTop-5 Documents:\n{docs_formatted}"
+    user_message = f"Pertanyaan:\n{question}\n\nRetrieved Documents:\n{docs_formatted}"
     
     messages = [
         {"role": "system", "content": RAFT_SYSTEM_PROMPT},
@@ -486,7 +388,6 @@ def generate_single_raft_entry(question: str, documents: List[str], max_attempts
         
         parsed = parse_raft_json(raw)
         if parsed:
-            # Sisipkan documents langsung dari hasil retrieval
             final_parsed = {
                 "instruction": parsed.get("instruction", question),
                 "documents": documents,
@@ -532,7 +433,6 @@ def run_raft_pipeline(
     print(f"Resume mode   : {resume}")
     print("=" * 70)
     
-    # Load existing questions jika resume mode
     existing_questions = set()
     if resume and output_path.exists():
         with open(output_path, "r", encoding="utf-8") as f:
@@ -548,7 +448,6 @@ def run_raft_pipeline(
         if existing_questions:
             print(f"Resume: {len(existing_questions)} pertanyaan sudah ada, akan di-skip.\n")
     
-    # Filter pertanyaan yang belum diproses
     pending_questions = [
         q for q in questions if q.strip() not in existing_questions
     ]
@@ -559,14 +458,12 @@ def run_raft_pipeline(
     
     print(f"Pertanyaan yang akan diproses: {len(pending_questions)}\n")
     
-    # Mulai generate
     success_count = 0
     fail_count = 0
     
     for idx, question in enumerate(tqdm(pending_questions, desc="Generating RAFT Dataset"), start=1):
         print(f"\n[{idx}/{len(pending_questions)}] {question[:80]}...")
         
-        # STEP 1: Retrieve Top-5 Documents langsung dari Supabase + CrossEncoder
         print("  Retrieving documents...")
         documents = retrieve_top5_documents(question)
         
@@ -578,7 +475,6 @@ def run_raft_pipeline(
         print(f"  [OK] {len(documents)} dokumen diperoleh.")
         time.sleep(REQUEST_DELAY)
         
-        # STEP 2: Generate RAFT entry via LLM
         print("  Generating RAFT entry... (Mohon tunggu, ini bisa memakan waktu 40-60 detik)")
         raft_entry = generate_single_raft_entry(question, documents, max_attempts=3)
         
@@ -587,7 +483,6 @@ def run_raft_pipeline(
             fail_count += 1
             continue
         
-        # STEP 3: Simpan ke file JSONL (append)
         with open(output_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(raft_entry, ensure_ascii=False) + "\n")
         
@@ -604,10 +499,6 @@ def run_raft_pipeline(
     print(f"  📁 Output  : {output_path}")
     print("=" * 70)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# UTILITY: Load pertanyaan dari file
-# ─────────────────────────────────────────────────────────────────────────────
 
 def load_questions_from_file(filepath: Path) -> List[str]:
     """
@@ -645,7 +536,6 @@ def load_questions_from_jsonl(filepath: Path) -> List[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # Load pertanyaan dari dataset lama (finalv1)
     dataset_lama = DATASET_DIR / "raft_dataset_finalv1.jsonl"
     
     if dataset_lama.exists():
@@ -655,12 +545,10 @@ if __name__ == "__main__":
         print(f"File {dataset_lama} tidak ditemukan, menggunakan QUESTIONS default.")
         questions_to_process = QUESTIONS
         
-    # Batasi jumlah pertanyaan yang diproses jika MAX_QUESTIONS di-set
     if MAX_QUESTIONS is not None:
         questions_to_process = questions_to_process[:MAX_QUESTIONS]
         print(f"Membatasi pemrosesan hanya untuk {MAX_QUESTIONS} pertanyaan pertama.")
     
-    # Output file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output = DATASET_DIR / f"raft_dataset_retrieval_grounded_{timestamp}.jsonl"
     
