@@ -18,15 +18,11 @@ from app.handler.user_hendler import(
     handle_get_user
 )
 
-from app.handler.retrieval_handler import handle_test_retrieval
 
 bp = Blueprint("routes", __name__)
 
 # Endpoint RAG (Dokumen & Embedding)
 bp.add_url_rule('/api/generate-embedding', 'generate_embedding', handle_generate_embedding, methods=['POST'])
-
-# Endpoint Evaluasi RAGAS
-# bp.add_url_rule('/api/evaluate-response', 'evaluate_response', handle_evaluate_response, methods=['POST'])
 
 # Endpoint Model Management
 bp.add_url_rule('/api/models', 'get_model_info', handle_get_model_info, methods=['GET'])
@@ -41,6 +37,3 @@ bp.add_url_rule('/api/chat-sessions/<int:session_id>', 'delete_session', handle_
 
 # Endpoint User
 bp.add_url_rule('/api/user/<int:id>', 'get_user', handle_get_user, methods=['GET'])
-
-# Endpoint Test Retrieval (tanpa LLM generation)
-bp.add_url_rule('/api/test-retrieval', 'test_retrieval', handle_test_retrieval, methods=['POST'])

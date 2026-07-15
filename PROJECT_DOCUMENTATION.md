@@ -30,12 +30,12 @@ Peraturan Desa (Perdes) merupakan regulasi hukum yang mengatur kehidupan masyara
 | **LLM — Base Models**       | Llama 3.1 8B, Qwen2.5 7B, DeepSeek-R1 7B     | Model bahasa besar untuk generasi jawaban (via HuggingFace Router)           |
 | **LLM — OpenAI-Compatible** | GPT-4o-mini, GPT-3.5-turbo, Gemini 2.0 Flash | Model cloud via Maia Router API                                              |
 | **LLM — RAFT Model**        | `model_merged_raft_perdes`                   | Model fine-tuned khusus domain Perdes (di-host di B200 Server)               |
-| **Reranker**                | CrossEncoder`BAAI/bge-reranker-v2-m3`        | Cross-encoder untuk re-ranking dokumen hasil retrieval                       |
+| **Reranker**                | CrossEncoder `cross-encoder/ms-marco-MiniLM-L6-v2` (lokal) | Cross-encoder untuk re-ranking dokumen hasil retrieval (di-load langsung via `sentence-transformers`, bukan API eksternal) |
 | **PDF Extraction**          | PyMuPDF (fitz)                               | Ekstraksi teks dari file PDF berbasis teks                                   |
 | **OCR**                     | pytesseract + Pillow + OpenCV                | Ekstraksi teks dari PDF hasil scan (gambar)                                  |
 | **Orchestration**           | LangChain + LangChain-OpenAI                 | Orkestrasi pipeline RAG dan integrasi vector store                           |
 | **Evaluation Framework**    | RAGAS                                        | Evaluasi kualitas sistem RAG secara otomatis (faithfulness, relevancy, dll.) |
-| **Reranking Library**       | rank-bm25, Cohere                            | Hybrid search dan reranking dokumen                                          |
+| **Reranking Library**       | sentence-transformers (CrossEncoder)          | Re-ranking dokumen hasil retrieval secara lokal                              |
 | **Database Driver**         | psycopg2-binary                              | Koneksi Python ke PostgreSQL                                                 |
 | **Supabase Client**         | supabase-py                                  | Client resmi Python untuk Supabase (vector store + auth)                     |
 | **Configuration**           | python-dotenv                                | Manajemen environment variables                                              |
@@ -93,7 +93,7 @@ Sistem dibangun dengan arsitektur **Layered Architecture** yang terdiri dari emp
 │               EXTERNAL SERVICES LAYER                   │
 │                                                         │
 │  HuggingFace Router │ Maia Router (OpenAI-compat)       │
-│  B200 RAFT Server   │ HF Reranker API                   │
+│  B200 RAFT Server   │ Reranker Lokal (CrossEncoder)    │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -120,10 +120,13 @@ Berikut adalah gambaran besar (_big picture_) alur kerja keseluruhan sistem, mul
               │            (Question, Context, Answer)
               │                         │
               │                         ▼
-              │                  LoRA Fine-Tuning
+              │                  RAFT Fine-Tuning
+              │                  (Retrieval-Augmented
+              │                   Fine-Tuning)
               │                         │
               │                         ▼
               │                  Fine-Tuned Model
+              │                  (model_merged_raft_perdes)
               │                         │
       ┌───────┴───────┐                 │
       ▼               ▼                 │
@@ -154,7 +157,7 @@ Retrieved Context Retrieved Context     │
     Evaluation Comparison
 (Faithfulness, Answer Relevancy,
  Context Precision, Context Recall,
- Noise Sensitivity, Latency)
+ Semantic Similarity, Latency)
               │
               ▼
      Comparative Analysis
@@ -168,57 +171,54 @@ Berikut adalah detail logika alur kerja (workflow) dari API ingestion yang melib
 
 ```text
 [POST /api/generate-embedding]
+  Payload: file (PDF), form: save_to_db (true/false), is_distractor (true/false)
           │
           ▼
-ingest_pdf_to_vector_db(file_path, save_to_db)
+handle_generate_embedding()  → simpan ke temp/, panggil ingest_pdf_to_vector_db()
           │
           ▼
-extract_and_chunk_pdf(file_path, save_to_db) ─────────────────────┐
+ingest_pdf_to_vector_db(file_path, original_filename, save_to_db, is_distractor)
+          │
+          ▼
+extract_and_chunk_pdf(file_path, save_to_db, is_distractor) ──────────┐
           │                                                       │
           ├─► extract_text_from_pdf()                             │
-          │   (PyMuPDF / Fallback OCR)                            │
+          │   (PyMuPDF / Fallback OCR pytesseract jika < 50 char)  │
           │                                                       │
           ├─► chunk_documents(documents)                          │
-          │   (Cleaning, Metadata, Structural Chunking)           │
+          │   (clean_legal_text + _parse_perdes_sections)         │
+          │   ↳ Metadata Injection OTOMATIS di sini:              │
+          │     inject source_file, document_id, village_name,     │
+          │     perdes_number, perdes_year (dari extract_perdes_  │
+          │     metadata); prefix "perdes_dis" jika is_distractor │
           │                                                       │
           ├─► save_results_to_folder()                            │
-          │   (Simpan file lokal .txt & .json untuk review)       │
-          │                                                       │
-          ├─► if save_to_db == True:                              │
-          │       save_chunks_to_postgres()                       │
-          │       (Simpan teks asli ke tabel chunks_perdes)       │
+          │   (Simpan file lokal .txt & .json ke data/processed/ │
+          │    raw/ atau distraktor/ untuk review)                 │
           │                                                       │
           └───────────────────────────────────────────────────────┘
           │
           ▼
-   Metadata Injection
-(Inject source_file, document_id,
- village_name, perdes_number, dll)
+   Jika save_to_db == True:
           │
           ▼
-Is save_to_db == True?
+   save_chunks_to_postgres(chunks)
+   (Simpan teks asli ke tabel chunks_perdes via psycopg2)
           │
-    ┌─────┴─────┐
-   YES          NO
-    │           │
-    ▼           ▼
-Check Existing  Return "PREVIEW MODE"
-Document in DB  (Proses Selesai, skip DB)
-    │
-    ▼
-If exists > 0:
-delete_document_chunks(document_id)
-(Hapus vektor/dokumen lama di DB)
-    │
-    ▼
-store_chunks_to_supabase(chunks)
-(Kirim ke OpenAI untuk Embedding,
-lalu simpan ke tabel `documents`
-di Supabase pgvector)
-    │
-    ▼
-Return "SUCCESS"
+          ▼
+   check_document_exists(document_id)  →  jika > 0:
+   delete_document_chunks(document_id)  (hapus vektor lama)
+          │
+          ▼
+   store_chunks_to_supabase(chunks)
+   (Kirim ke OpenAI text-embedding-3-large, simpan ke
+    tabel `documents` di Supabase pgvector)
+          │
+          ▼
+   Return "SUCCESS"  (atau "PREVIEW MODE" jika save_to_db=False)
 ```
+
+> ⚠️ **Catatan alur sebenarnya:** `save_to_db` mengontrol **dua** penyimpanan sekaligus — baik ke PostgreSQL (`chunks_perdes`) maupun ke Supabase pgvector (`documents`). Jika `save_to_db=False`, keduanya dilewati dan sistem hanya menyimpan hasil ekstraksi (.txt/.json) ke folder lokal sebagai **PREVIEW MODE**. Parameter `is_distractor` (default `false`) mengubah `document_id` menjadi prefix `perdes_dis` untuk dataset distraktor.
 
 ### Detail Tahapan Ekstraksi & Chunking (Data Preprocessing)
 
@@ -311,8 +311,11 @@ Mode Opsional:
        │          ↳ is_chitchat() → jawab salam langsung (rule-based)
        │          ↳ is_off_topic() → tolak pertanyaan di luar domain hukum
        │
-3. [History]      Ambil riwayat percakapan terakhir (maks. 10 messages)
+3. [History]      Ambil riwayat percakapan terakhir (maks. 6 messages)
        │          dari PostgreSQL untuk konteks follow-up
+       │          (MAX_HISTORY_MESSAGES = 6 di chat_use_case.py)
+       │          ⚠️ Jika evaluate=True → history DI-BYPASS (kosong)
+       │            agar evaluasi tidak terkontaminasi riwayat
        │
 4. [Rewrite]      rewrite_query_with_history()
        │          ↳ Jika ada history, gunakan GPT-3.5-turbo untuk
@@ -324,14 +327,16 @@ Mode Opsional:
        │          ↳ Vector similarity search menggunakan cosine distance
        │
 6. [Rerank]       reranker_service.rerank_documents(top_k=5)
-       │          ↳ Cross-encoder BAAI/bge-reranker-v2-m3 menilai ulang
-       │            relevansi 20 kandidat → pilih top 5
+       │          ↳ Cross-encoder LOKAL cross-encoder/ms-marco-MiniLM-L6-v2
+       │            (sentence-transformers, di-load langsung — bukan API eksternal)
+       │            menilai ulang relevansi 20 kandidat → pilih top 5
        │          ↳ Confidence threshold check: jika skor < -5.0, jawab
        │            "informasi tidak ditemukan" (tanpa hallucination)
        │
-7. [Expand]       fetch_adjacent_chunks() (skip untuk RAFT model)
-       │          ↳ Ambil chunk tetangga (i-1, i+1) untuk konteks lebih kaya
-       │          ↳ Batch query ke Supabase berdasarkan (document_id, chunk_index)
+7. [Expand]       Adjacent Chunk Expansion — DINONAKTIFKAN SEMENTARA
+       │          ↳ Di rag_service.py, adjacent_map = {} (hardcoded kosong)
+       │          ↳ Fitur fetch_adjacent_chunks() tidak dijalankan
+       │            (perubahan sementara demi eksperimen/perbandingan)
        │
 8. [Generate]     HuggingFaceService.chat_with_context()
        │          ↳ Bangun prompt: system prompt + context + history + question
@@ -340,19 +345,23 @@ Mode Opsional:
        │
 9. [Evaluate]     (Opsional, jika evaluate=True pada sesi)
        │          ↳ RAGAS menghitung: faithfulness, answer_relevancy,
-       │            context_precision, context_recall, noise_sensitivity
+       │            context_precision, context_recall
        │          ↳ SemanticAnswerSimilarity (SAS) menghitung cosine similarity
        │            antara answer dan ground_truth menggunakan embedding model
+       │            (hanya jika ground_truth diberikan)
        │          ↳ Semua metrik dikembalikan dalam satu dict evaluation_result
        │
 10. [Save]        Simpan ke PostgreSQL: pertanyaan, jawaban, sources,
        │          metadata, skor RAGAS + semantic_similarity
+       │          ⚠️ CATATAN: di chat_use_case.py, pemanggilan
+       │          save_chat_message() sedang DIMATIKAN SEMENTARA
+       │          ([SKIP] mode evaluasi batch) — riwayat tidak tersimpan.
        │
 11. [Response]    Kembalikan JSON ke frontend:
                   {answer, sources, evaluation, model_used}
                   evaluation: {faithfulness, answer_relevancy,
                                context_precision, context_recall,
-                               noise_sensitivity, semantic_similarity}
+                               semantic_similarity}
 ```
 
 ## C. Alur Chat dengan Model Fine-Tune RAFT
@@ -383,45 +392,53 @@ Mode Opsional:
        │
        │  ┌────────────────────────────────────────────────────────┐
        │  │         POST ke B200 RAFT Server                       │
-       │  │  URL: {FINETUNED_API_URL}/api/chat-rag                 │
+       │  │  URL: {FINETUNED_API_URL}/chat-raft                    │
        │  │  Payload:                                              │
        │  │  {                                                     │
-       │  │    "pertanyaan": "<user_question>",                    │
-       │  │    "dokumen": ["<chunk1>", "<chunk2>", ..., "<chunk5>"]│
+       │  │    "question": "<user_question>",                      │
+       │  │    "documents": ["<chunk1>", "<chunk2>", ..., "<chunk5>"]│
        │  │  }                                                     │
        │  └────────────────────────────────────────────────────────┘
        │
        │  ┌────────────────────────────────────────────────────────┐
        │  │         Response dari B200 RAFT Server                 │
        │  │  {                                                     │
-       │  │    "jawaban": "<final_answer>",                        │
-       │  │    "analisis": "<thought_process / chain-of-thought>", │
-       │  │    "raw_response": "<full_model_output>",              │
-       │  │    "num_documents": 5,                                 │
-       │  │    "model_type": "raft",                               │
+       │  │    "answer": "<final_answer>",                          │
+       │  │    "thought": "<thought_process / chain-of-thought>",   │
+       │  │    "konteks_dipilih": "<...>",                          │
+       │  │    "konteks_ditolak": "<...>",                          │
+       │  │    "documents_count": 5,                                │
+       │  │    "question": "<user_question>",                      │
        │  │    "status": "success"                                 │
        │  │  }                                                     │
        │  └────────────────────────────────────────────────────────┘
        │
        │  ↳ Response di-standardisasi ke format OpenAI-compatible:
-       │    {"choices": [{"message": {"content": jawaban}}],
-       │     "raft_metadata": {"analisis": ..., "num_documents": ...}}
+       │    {"choices": [{"message": {"content": answer}}],
+       │     "raft_metadata": {"analisis": thought, "konteks_dipilih": ...,
+       │                      "konteks_ditolak": ..., "num_documents": ...}}
        │
 10. [Evaluate]    (Opsional, jika evaluate=True pada sesi)
        │          ↳ RAGAS + SAS menghitung metrik sama seperti Alur B
+       │            (faithfulness, answer_relevancy, context_precision,
+       │             context_recall, + semantic_similarity jika ada ground_truth)
        │          ↳ contexts diambil dari raw_doc_chunks (bukan expanded)
        │
 11. [Save]        Simpan ke PostgreSQL dengan field tambahan:
        │          ↳ metadata["analysis"] = raft_metadata["analisis"]
        │            (thought process RAFT disimpan di kolom metadata JSONB)
+       │          ⚠️ CATATAN: save_chat_message() sedang DIMATIKAN
+       │          SEMENTARA di chat_use_case.py ([SKIP] mode evaluasi batch)
        │
 12. [Response]    Kembalikan JSON ke frontend dengan field tambahan:
                   {
                     answer, sources, evaluation, model_used,
                     "analysis": "<thought_process dari RAFT>"  ← KHUSUS RAFT
+                    "konteks_dipilih": "<...>",
+                    "konteks_ditolak": "<...>",
                     evaluation: {faithfulness, answer_relevancy,
                                  context_precision, context_recall,
-                                 noise_sensitivity, semantic_similarity}
+                                 semantic_similarity}
                   }
 ```
 
@@ -429,12 +446,12 @@ Mode Opsional:
 
 | Tahapan                    | Model Standar (Alur B)                     | RAFT Model (Alur C)                        |
 | -------------------------- | ------------------------------------------ | ------------------------------------------ |
-| **Adjacent Expansion**     | ✅ Dijalankan (ambil chunk tetangga)       | ❌ Dilewati                                |
+| **Adjacent Expansion**     | ⚠️ DINONAKTIFKAN SEMENTARA (`adjacent_map = {}`) | ❌ Dilewati                                |
 | **System Prompt**          | ✅ Dibangun (instruksi + konteks gabungan) | ❌ Tidak ada                               |
-| **Format Input ke LLM**    | Joined context string dalam system prompt  | List raw chunks terpisah (`"dokumen"`)     |
-| **Endpoint LLM**           | HuggingFace Router / Maia Router           | B200 RAFT Server (`/api/chat-rag`)         |
-| **Field Respons Tambahan** | —                                          | `"analysis"` (chain-of-thought thinking)   |
-| **Chat History Konteks**   | ✅ Dikirim ke LLM                          | ❌ Tidak dikirim (RAFT stateless per-call) |
+| **Format Input ke LLM**    | Joined context string dalam system prompt  | List raw chunks terpisah (`"documents"`)   |
+| **Endpoint LLM**           | HuggingFace Router / Maia Router           | B200 RAFT Server (`/chat-raft`)            |
+| **Field Respons Tambahan** | —                                          | `"analysis"`, `"konteks_dipilih"`, `"konteks_ditolak"` (RAFT) |
+| **Chat History Konteks**   | ✅ Dikirim ke LLM (maks. 6 pesan)         | ❌ Tidak dikirim (RAFT stateless per-call) |
 
 ---
 
@@ -459,11 +476,11 @@ Mode Opsional:
      │          {question, contexts, answer, ground_truth}
      │
 2. [LLM Judge] Kirim ke RAGAS evaluate() via LangchainLLMWrapper:
-     │          Model: openai/gpt-3.5-turbo-16k (temperature=0.0)
+     │          Model: openai/gpt-4o-mini (temperature=0.0, max 2000)
      │          Role : juri absolut, tidak berubah antar evaluasi
      │
      │  ┌─────────────────────────────────────────────────────────────┐
-     │  │ METRIK YANG DIHITUNG:                                       │
+     │  │ METRIK YANG DIHITUNG (4 metrik RAGAS):                    │
      │  │                                                             │
      │  │ ① faithfulness (0–1)                                       │
      │  │   Input : answer + contexts                                 │
@@ -479,23 +496,22 @@ Mode Opsional:
      │  │   Input : question + contexts + ground_truth               │
      │  │   Ukur  : seberapa presisi konteks? (chunk relevan di atas) │
      │  │   Tinggi = konteks tidak banyak noise                      │
+     │  │   ⚠️ Hanya dihitung jika ground_truth diberikan           │
      │  │                                                             │
      │  │ ④ context_recall (0–1)                                     │
      │  │   Input : contexts + ground_truth                          │
      │  │   Ukur  : seberapa banyak info ground_truth ada di konteks?│
      │  │   Tinggi = konteks lengkap mencakup referensi pakar        │
      │  │   ⚠️ Akurat hanya jika ground_truth adalah jawaban pakar   │
+     │  │   ⚠️ Hanya dihitung jika ground_truth diberikan           │
      │  │                                                             │
-     │  │ ⑤ noise_sensitivity (0–1)                                  │
-     │  │   Input : question + answer + contexts + ground_truth      │
-     │  │   Ukur  : apakah model terpengaruh konteks tidak relevan?  │
-     │  │   Rendah = model lebih robust terhadap noise               │
+     │  │ ⚠️ CATATAN: noise_sensitivity TIDAK digunakan lagi        │
+     │  │   (tidak ada di self.metrics pada ragas_service.py)        │
      │  └─────────────────────────────────────────────────────────────┘
      │
 3. [Result]    df_results = evaluation_result.to_pandas()
      │          formatted_result = {faithfulness, answer_relevancy,
-     │                              context_precision, context_recall,
-     │                              noise_sensitivity}
+     │                              context_precision, context_recall}
      │
 ─────┴──────────────────────────────────────────────────────────────────
  KOMPONEN 2 — SAS: Semantic Answer Similarity
@@ -511,13 +527,16 @@ Mode Opsional:
      │          Clip ke [0.0, 1.0] agar konsisten
      │
 6. [Merge]     formatted_result["semantic_similarity"] = sas_score
-     │          → Satu dict evaluasi lengkap dengan 6 metrik
+     │          → Satu dict evaluasi lengkap (4 metrik RAGAS + SAS)
      │
 ─────┴──────────────────────────────────────────────────────────────────
  PERSISTENSI — Simpan ke Database
 ─────────────────────────────────────────────────────────────────────────
      │
 7. [Save]      chat_service.save_chat_message(evaluation=evaluation_result)
+     │          ⚠️ CATATAN: di chat_use_case.py pemanggilan ini sedang
+     │          DIMATIKAN SEMENTARA ([SKIP] mode evaluasi batch) —
+     │          riwayat tidak tersimpan ke PostgreSQL saat ini.
      │
      │  Mapping key Python → kolom PostgreSQL:
      │  ┌──────────────────────┬────────────────────────────────────┐
@@ -527,7 +546,6 @@ Mode Opsional:
      │  │ "answer_relevancy"   │ answer_relevance                   │
      │  │ "context_precision"  │ context_precision                  │
      │  │ "context_recall"     │ context_recall                     │
-     │  │ "noise_sensitivity"  │ noise_sensitivity                  │
      │  │ "semantic_similarity"│ semantic_similarity                │
      │  └──────────────────────┴────────────────────────────────────┘
      │
@@ -545,8 +563,9 @@ Mode Opsional:
 | **answer_relevancy**    | 0–1     | question, answer                         | ❌                            | Jawaban harus relevan dan menjawab pertanyaan                |
 | **context_precision**   | 0–1     | question, contexts, ground_truth         | ⚠️ Sebaiknya ada              | Chunk relevan harus di ranking atas                          |
 | **context_recall**      | 0–1     | contexts, ground_truth                   | ✅ Wajib                      | Konteks harus mencakup info dari jawaban pakar               |
-| **noise_sensitivity**   | 0–1     | question, answer, contexts, ground_truth | ✅ Wajib                      | Rendah lebih baik: model tidak terpengaruh noise             |
 | **semantic_similarity** | 0–1     | answer, ground_truth                     | ✅ Wajib                      | Cosine similarity embedding: kesamaan makna jawaban vs pakar |
+
+> ⚠️ **`noise_sensitivity` TIDAK lagi digunakan** — tidak ada di `self.metrics` pada `ragas_service.py` (sekarang hanya 4 metrik: faithfulness, answer_relevancy, context_precision, context_recall).
 
 ### Penanganan Kasus ground_truth Tidak Diberikan
 
@@ -555,8 +574,8 @@ Jika ground_truth = None pada request payload:
   → ragas_service memberi WARNING di log
   → ground_truth di-fallback ke answer (jawaban LLM itu sendiri)
   → Konsekuensi:
+      • context_precision → TIDAK dihitung (butuh ground_truth)
       • context_recall   → TIDAK VALID (mengukur konteks vs jawaban LLM, bukan pakar)
-      • noise_sensitivity → TIDAK VALID (menggunakan jawaban LLM sebagai referensi)
       • semantic_similarity → SELALU 1.0 (answer == ground_truth)
   → Metrik faithfulness & answer_relevancy TETAP VALID
 ```
@@ -565,98 +584,50 @@ Jika ground_truth = None pada request payload:
 
 | Komponen               | Model                                                | Parameter Kunci             | Tujuan                                |
 | ---------------------- | ---------------------------------------------------- | --------------------------- | ------------------------------------- |
-| **LLM Judge (RAGAS)**  | `openai/gpt-3.5-turbo-16k`                           | `temperature=0.0`, max 2000 | Juri stabil & deterministik           |
+| **LLM Judge (RAGAS)**  | `openai/gpt-4o-mini`                                 | `temperature=0.0`, max 2000 | Juri stabil & deterministik           |
 | **Embeddings (RAGAS)** | `openai/text-embedding-3-large`                      | 1536 dimensi                | Representasi semantik untuk relevancy |
 | **SAS Embedder**       | `openai/text-embedding-3-large`                      | Sama dengan RAGAS embedder  | Cosine similarity answer vs truth     |
 | **Wrapper**            | `LangchainLLMWrapper` + `LangchainEmbeddingsWrapper` | —                           | Standardisasi format JSON RAGAS       |
 
 ---
 
-## D. Alur Pembuatan Dataset RAFT v4 (`notebooks/generate_raft.py`)
+## D. Alur Pembuatan Dataset RAFT (`notebooks/generate_raft_dataset.py`)
 
-> **V4 — Pembaruan Utama:** Completion Natural (kutipan hanya di thought_process), Answerability Check, Hard Negative baru (similarity 0.75–0.95), distribusi dominan Pasal & Ayat Lookup, MULTIHOP_RATIO diturunkan ke 10%.
+> **V2 — Retrieval-Grounded Generator:** Berbeda dengan pendekatan lama yang mengambil chunk dari file lokal, V2 ini **mengambil dokumen langsung dari Vector DB (Supabase)** menggunakan pipeline retrieval yang **sama persis dengan inference** (Top-20 → Re-ranking → Top-5). Tujuannya agar distribusi data saat training sama dengan distribusi saat inference (RAFT principle). Generator LLM: `openai/gpt-4o-mini` (`temperature=0.3`, `max_tokens=2048`).
 
 ```
-[Input]  File *_chunks.json dari folder data/processed/
+[Input]  Daftar pertanyaan (dari raft_dataset_finalv1.jsonl
+        via load_questions_from_jsonl, atau QUESTIONS default)
     │
-1. [Cache Check]   Cek data/cache/chunk_embeddings.pkl
-    │              ↳ Jika ada → langsung load (hemat waktu & biaya API)
-    │              ↳ Jika belum → embed & simpan cache
+1. [Resume]       Jika output sudah ada → skip pertanyaan yang sama
+    │              (mode resume=True, hindari regenerate)
     │
-2. [Load & Filter] Baca *_chunks.json, filter is_substantive()
-    │              ↳ Chunk harus ≥ 200 karakter & minimal 2 kalimat valid
+2. [Retrieve]      retrieve_top5_documents(question)
+    │              ↳ SupabaseVectorStore.similarity_search(k=INITIAL_K=10)
+    │                + filter EXCLUDED_DOCUMENT_IDS (dokumen "gold" dibuang
+    │                agar tidak jadi distractor yang terlalu mudah)
+    │              ↳ rerank_documents() → Top-5 (cross-encoder lokal)
+    │              ↳ Confidence filter: jika top_score < -5.0 → skip pertanyaan
+    │              ↳ Hasil: 5 chunk dokumen mentah (raw content)
     │
-3. [Embed]         Vectorisasi via OpenAI API (text-embedding-3-large)
-    │              ↳ Batch 64 teks | Retry 3x | Normalisasi L2
-    │              ↳ Simpan ke data/cache/chunk_embeddings.pkl
+3. [Generate]     generate_single_raft_entry(question, documents)
+    │              ↳ System prompt RAFT_SYSTEM_PROMPT (retrieval-grounded)
+    │              ↳ call_llm() → GPT-4o-mini (temp 0.3, retry 3x)
+    │              ↳ parse_raft_json() + validate_raft_structure()
+    │                (wajib: instruction, thought_process, completion)
+    │              ↳ thought_process HARUS berupa dict:
+    │                  {"document_analysis": [...], "summary": "..."}
+    │              ↳ Jika invalid → retry (maks 3 attempt)
     │
-4. [Multi-hop?]    MULTIHOP_RATIO = 10% (diturunkan dari 30%)
-    │              ↳ Pasangan chunk: Cosine Similarity 0.40–0.80
-    │              ↳ Jika tidak ada pasangan valid → is_multihop = False
-    │
-5. [Generate Q]    generate_question() via GPT-4o-mini
-    │
-    │   TIPE PERTANYAAN (diacak berbobot — dominan pasal/ayat lookup):
-    │   ┌─────────────────┬───────┬──────────────────────────────────────┐
-    │   │ Tipe            │ Bobot │ Gaya Jawaban                         │
-    │   ├─────────────────┼───────┼──────────────────────────────────────┤
-    │   │ faktual         │  15   │ langsung                             │
-    │   │ definisional    │  10   │ penjelasan                           │
-    │   │ prosedural      │  15   │ terstruktur                          │
-    │   │ kondisional     │  10   │ langsung                             │
-    │   │ enumeratif      │  10   │ terstruktur                          │
-    │   │ pasal_lookup    │  20   │ formal_hukum  ← bobot terbesar       │
-    │   │ ayat_lookup     │  10   │ formal_hukum                         │
-    │   │ komparatif      │   5   │ terstruktur                          │
-    │   │ reasoning_based │   5   │ percakapan / penjelasan              │
-    │   └─────────────────┴───────┴──────────────────────────────────────┘
-    │   ↳ pasal_lookup & ayat_lookup selalu pakai gaya "legal"
-    │   ↳ natural query DILARANG sebut nama/tahun peraturan
-    │
-6. [Answerability] check_answerability() — BARU di V4
-    │              ↳ LLM mengevaluasi apakah pertanyaan BISA dijawab
-    │                sepenuhnya menggunakan oracle chunk
-    │              ↳ Jika TIDAK → buang (hitung sebagai unanswerable)
-    │              ↳ Mencegah pertanyaan ambigu masuk dataset
-    │
-7. [Distractor]    select_semantic_distractors() — 3 tipe negative
-    │              ↳ normal         → similarity 0.40–0.70
-    │              ↳ hard_negative  → similarity 0.75–0.95 (BARU)
-    │                                 jebakan paling kuat, topik hampir sama
-    │              ↳ near_miss      → similarity 0.60–0.75
-    │              ↳ completely_absent → similarity < 0.40
-    │
-8. [Oracle Logic]  80/20 split (sesuai RAFT Paper)
-    │              ↳ 80% oracle_present=True: oracle disisipkan acak
-    │              ↳ 20% oracle_present=False: pilih dari
-    │                  hard_negative / near_miss / completely_absent
-    │
-9. [Generate A]    generate_thought_and_completion() via GPT-4o-mini
-    │
-    │   { "thought_process": "...", "completion": "..." }
-    │
-    │   Oracle-PRESENT (PERUBAHAN V4):
-    │   • thought_process: analisis dokumen + WAJIB kutipan <<teks asli>>
-    │   • completion: jawaban NATURAL, DILARANG ada <<kutipan>> di sini
-    │
-    │   Oracle-ABSENT:
-    │   • thought_process: buktikan ketiadaan jawaban
-    │   • completion: nyatakan tidak tersedia secara natural
-    │
-10. [Quality Gate] is_bad_sample() — diperbarui V4
-    │              ↳ TOLAK jika completion menyebut "Dokumen N"
-    │              ↳ TOLAK jika completion mengandung <<...>> (raw quote)
-    │              ↳ TOLAK jika oracle_present=True tapi thought
-    │                tidak memiliki kutipan <<...>>
-    │              → Sampel tidak lolos: DISKIP
-    │
-11. [Save]         Simpan ke data/dataset/raft_dataset_v4_production.jsonl
-                   ↳ Format JSONL | Append per sampel (mode append, tidak overwrite)
-                   ↳ Auto-backup file lama: raft_backup_YYYYMMDD_HHMMSS.jsonl
-                   ↳ Counter: ok | unanswerable | fail | skip
+4. [Save]         Simpan ke data/dataset/
+                   raft_dataset_retrieval_grounded_YYYYMMDD_HHMMSS.jsonl
+                   ↳ Format JSONL | Append per sampel (resume-safe)
+                   ↳ Counter: Berhasil | Gagal
 ```
 
-### Format Sampel Dataset RAFT v4
+> ⚠️ **Catatan penting — struktur `thought_process` berubah:** Di V2, `thought_process` **bukan lagi string bebas**, melainkan **objek terstruktur** `{"document_analysis": [{"document": n, "analysis": "..."}], "summary": "..."}`. Setiap dokumen hasil retrieval wajib dianalisis satu per satu, lalu disintesis di `summary`. Aturan ketat diberlakukan agar tidak ada context-mixing: jika pertanyaan menyebut NOMOR PERATURAN spesifik, dokumen dengan nomor BERBEDA **wajib diabaikan** (tidak boleh masuk completion).
+
+### Format Sampel Dataset RAFT v2 (Retrieval-Grounded)
 
 ```json
 {
@@ -665,45 +636,43 @@ Jika ground_truth = None pada request payload:
     "pasal 7\nkewenangan lokal...",
     "pasal 1\nbpd adalah lembaga..."
   ],
-  "thought_process": "Pasal 1 relevan karena mendefinisikan BPD: <<badan permusyawaratan desa adalah lembaga yang melaksanakan fungsi pemerintahan>>. Pasal 7 membahas kewenangan, tidak relevan.",
-  "completion": "BPD berfungsi sebagai lembaga pemerintahan desa yang anggotanya merupakan wakil penduduk berdasarkan keterwakilan wilayah.",
-  "metadata_extra": {
-    "query_style": "natural",
-    "question_type": "pasal_lookup",
-    "multi_hop": false,
-    "oracle_present": true,
-    "negative_type": "none",
-    "style": "formal_hukum",
-    "evidence_docs": [2]
-  }
+  "thought_process": {
+    "document_analysis": [
+      {"document": 1, "analysis": "Pasal 1 relevan: mendefinisikan BPD sebagai badan permusyawaratan desa."},
+      {"document": 2, "analysis": "Pasal 7 membahas kewenangan, tidak relevan dengan pertanyaan fungsi."}
+    ],
+    "summary": "Berdasarkan Pasal 1, BPD adalah lembaga permusyawaratan desa."
+  },
+  "completion": "BPD berfungsi sebagai lembaga pemerintahan desa yang anggotanya merupakan wakil penduduk berdasarkan keterwakilan wilayah."
 }
 ```
 
-> Perhatikan: pada V4 `completion` tidak mengandung `<<kutipan>>` — jawaban harus natural. Kutipan **hanya** ada di `thought_process`.
+> Completion **harus natural** (hanya informasi dari Documents, tanpa pengetahuan internal model, tanpa halusinasi). Analisis tiap dokumen ada di `thought_process.document_analysis`.
 
-### Keputusan Desain Penting (V4)
+### Generator Negatif Terpisah (`notebooks/negative_generate_raft_datase.py`)
+
+Untuk membangun set distractor yang kuat, terdapat notebook **terpisah** yang mengambil dokumen dari `EXCLUDED_DOCUMENT_IDS` sebagai sumber negative sampling (INITIAL_K=40, FINAL_K=5, CONFIDENCE_THRESHOLD=-9999.0 agar tidak difilter). Hasilnya digabung dengan dataset utama untuk melatih model membedakan dokumen yang hampir identik.
+
+### Keputusan Desain Penting (V2)
 
 | Keputusan                                          | Alasan                                                                                                  |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **Kutipan hanya di `thought_process`**             | Completion yang natural lebih sesuai untuk fine-tuning model yang digunakan dalam percakapan nyata      |
-| **`check_answerability()` sebelum distractor**     | Mencegah pertanyaan yang tidak bisa dijawab masuk dataset; kualitas > kuantitas                         |
-| **`hard_negative` (0.75–0.95)**                    | Distractor yang sangat mirip secara semantik melatih model untuk membedakan dokumen yang hampir identik |
-| **`reasoning_based` menggantikan `interpretatif`** | Studi kasus what-if lebih menantang dan mencerminkan kebutuhan nyata dibanding pertanyaan "mengapa"     |
-| **`pasal_lookup` bobot terbesar (20)**             | Dataset didominasi pertanyaan lookup agar model terlatih menjawab pertanyaan pasal spesifik             |
-| **MULTIHOP_RATIO diturunkan ke 10%**               | Multi-hop terlalu sering menghasilkan konteks yang tidak koheren; 10% lebih realistis                   |
-| **Embedding Cache (`.pkl`)**                       | Embedding 500+ chunk memakan biaya API; cache mencegah re-embed setiap run                              |
-| **Oracle Hint `[INTERNAL]`**                       | LLM diberitahu posisi oracle via prompt internal yang tidak masuk ke output final                       |
+| **Retrieval-Grounded**                             | Dokumen diambil dari Vector DB dengan pipeline sama seperti inference, sehingga distribusi train ≈ inference    |
+| **Exclude "gold" docs saat retrieve**                | Dokumen jawaban dibuang dari kandidat agar tidak jadi distractor terlalu mudah                              |
+| **`thought_process` terstruktur**                  | `document_analysis` + `summary` memaksa LLM menganalisis tiap dokumen eksplisit sebelum menyintesis jawaban           |
+| **Larangan context-mixing**                         | Jika pertanyaan sebut nomor peraturan spesifik, dokumen nomor lain wajib diabaikan (hindari kontaminasi)          |
+| **Resume mode**                                     | Skip pertanyaan yang sudah ada di output → aman dijalankan berulang kali tanpa duplikasi                       |
+| **Validasi JSON ketat**                            | `validate_raft_structure()` menolak output tanpa key wajib / `thought_process` bukan dict → retry otomatis              |
 
 # Key Features
 
 ### 1. 🔍 Multi-Stage RAG Pipeline
 
-Pipeline RAG yang berlapis dan sistematis: **Retrieval (k=20) → Re-ranking (k=5) → Adjacent Chunk Expansion → Generation**.
+Pipeline RAG yang berlapis dan sistematis: **Retrieval (k=20) → Re-ranking (k=5) → Generation**.
 
 - **Tahap 1 (Retrieval):** Mengambil 20 kandidat dokumen (chunk) teratas yang secara semantik mirip dengan pertanyaan.
-- **Tahap 2 (Re-ranking):** AI Cross-Encoder menilai ulang 20 kandidat tersebut secara ketat, lalu membuang 15 terbawah dan hanya menyisakan **5 pemenang (Top 5)**.
-- **Tahap 3 (Expansion):** Khusus untuk 5 pemenang ini, sistem menarik paragraf tetangganya (sebelum & sesudah) untuk melengkapi teks yang terpotong.
-  Setiap tahap berfokus pada efisiensi dan akurasi, memastikan LLM hanya menerima konteks yang paling relevan namun utuh.
+- **Tahap 2 (Re-ranking):** Cross-Encoder **lokal** `cross-encoder/ms-marco-MiniLM-L6-v2` (via `sentence-transformers`, di-load langsung — bukan API eksternal) menilai ulang 20 kandidat tersebut secara ketat, lalu membuang 15 terbawah dan hanya menyisakan **5 pemenang (Top 5)**.
+- **Tahap 3 (Expansion):** ⚠️ **DINONAKTIFKAN SEMENTARA** — di `rag_service.py`, `adjacent_map = {}` di-hardcode kosong sehingga `fetch_adjacent_chunks()` tidak dijalankan (perubahan sementara untuk eksperimen/perbandingan).
 
 ### 2. 📝 Legal Document-Aware Chunking (Semantic & Recursive)
 
@@ -715,7 +684,7 @@ Sistem mendeteksi dan menyelesaikan pertanyaan lanjutan yang ambigu secara otoma
 
 ### 4. 🤖 Multi-Model Support
 
-Sistem mendukung **8 model LLM yang dapat dipilih**, mencakup model open-source (Llama, Qwen, DeepSeek), model cloud (GPT-4o-mini, Gemini 2.0 Flash), dan model RAFT fine-tuned khusus domain peraturan desa. Frontend dapat memilih model per sesi.
+Sistem mendukung **7 model LLM yang dapat dipilih** (`AVAILABLE_MODELS` di `rag_service.py`), mencakup model open-source (Llama 3.1 8B, Qwen2.5 7B, DeepSeek-R1 7B), model cloud (GPT-4o-mini, GPT-3.5-turbo, Gemini 2.0 Flash), dan model RAFT fine-tuned khusus domain peraturan desa (`model_merged_raft_perdes`). Frontend dapat memilih model per sesi.
 
 ### 5. 🧠 RAFT Model Integration
 
@@ -725,10 +694,12 @@ Terintegrasi dengan model fine-tuned berbasis **RAFT (Retrieval-Augmented Fine-T
 
 Evaluasi kualitas RAG dilakukan secara otomatis menggunakan dua komponen yang berjalan berurutan:
 
-- **RAGAS Framework** — menghitung 5 metrik berbasis LLM Judge (GPT-3.5-turbo): Faithfulness, Answer Relevancy, Context Precision, Context Recall, dan Noise Sensitivity.
-- **Semantic Answer Similarity (SAS)** — menghitung cosine similarity antara embedding `answer` dan `ground_truth` menggunakan `text-embedding-3-large`, menghasilkan skor kesamaan makna (0–1) yang tidak bergantung pada format atau tanda baca.
+- **RAGAS Framework** — menghitung **4 metrik** berbasis LLM Judge (`openai/gpt-4o-mini`, `temperature=0.0`): Faithfulness, Answer Relevancy, Context Precision, dan Context Recall. (Metrik `noise_sensitivity` sudah tidak digunakan lagi.)
+- **Semantic Answer Similarity (SAS)** — menghitung cosine similarity antara embedding `answer` dan `ground_truth` menggunakan `text-embedding-3-large`, menghasilkan skor kesamaan makna (0–1) yang tidak bergantung pada format atau tanda baca. Hanya dihitung jika `ground_truth` diberikan.
 
-Evaluasi berjalan per sesi (dikontrol flag `evaluate` di `chat_sessions`), dan seluruh 6 metrik tersimpan sebagai kolom FLOAT di tabel `chat_history` untuk keperluan analisis dan skripsi.
+Evaluasi berjalan per sesi (dikontrol flag `evaluate` di `chat_sessions`). ⚠️ **Catatan:** pemanggilan `save_chat_message()` sedang **dimatikan sementara** di `chat_use_case.py` (`[SKIP] mode evaluasi batch`), sehingga riwayat belum tersimpan ke PostgreSQL saat ini.
+
+> 🔕 **Inline LLM-as-a-Judge dinonaktifkan:** Fungsi `evaluate_rag_answer()` di `rag_service.py` (yang memanggil `gpt-4o-mini` untuk menilai jawaban secara inline) telah **di-comment** agar endpoint mengembalikan **respons murni dari model** tanpa penilaian juri. Field `judge_evaluation` ikut di-comment dari response JSON.
 
 ### 7. 🔒 Topic Guard & Confidence Threshold
 
@@ -738,7 +709,9 @@ Sistem memiliki dua lapisan filter: **Off-Topic Filter** (berbasis keyword) meno
 
 Sistem mengatasi masalah teks terpotong (akibat proses _chunking_ di awal) dengan fitur **Ekspansi Chunk Bertetangga**. Setelah proses _Re-ranking_ menghasilkan **5 chunk pemenang (Top 5)**, sistem secara otomatis kembali ke database untuk mengambil 1 chunk tepat **sebelum** dan 1 chunk tepat **sesudah** dari masing-masing pemenang tersebut.
 
-Hasilnya, LLM tidak hanya membaca 1 potongan kecil teks, melainkan membaca **5 blok teks yang utuh**. Karena masing-masing dari 5 pemenang ini diekspansi menjadi 3 bagian, total teks yang disuapkan ke LLM setara dengan 15 chunk dokumen (5 blok × 3 chunk).
+> ⚠️ **Status saat ini: DINONAKTIFKAN SEMENTARA.** Di `rag_service.py`, baris `adjacent_map = {}` di-hardcode sehingga `fetch_adjacent_chunks()` tidak dijalankan. Fitur ini masih tersedia sebagai kode (lihat blok di bawah) namun tidak aktif dalam pipeline saat ini — dimatikan untuk keperluan eksperimen/perbandingan.
+
+Hasilnya (jika diaktifkan kembali), LLM tidak hanya membaca 1 potongan kecil teks, melainkan membaca **5 blok teks yang utuh**. Karena masing-masing dari 5 pemenang ini diekspansi menjadi 3 bagian, total teks yang disuapkan ke LLM setara dengan 15 chunk dokumen (5 blok × 3 chunk).
 
 **Visualisasi Output Tahapan ke LLM:**
 
@@ -787,7 +760,7 @@ Sistem menggunakan dua database yang terpisah berdasarkan fungsinya:
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`users`**         | `id`, `username`, `password`, `created_at`                                                                                                                                                                             | Menyimpan data autentikasi pengguna sistem                                                                                                                                                      |
 | **`chat_sessions`** | `id`, `user_id`, `session_name`, `evaluate`, `created_at`                                                                                                                                                              | Merepresentasikan satu sesi percakapan. Field `evaluate` (BOOLEAN) menentukan apakah evaluasi RAGAS aktif untuk sesi tersebut                                                                   |
-| **`chat_history`**  | `id`, `session_id`, `user_id`, `user_query`, `llm_response`, `metadata` (JSONB), `is_evaluated`, `faithfulness`, `answer_relevance`, `context_precision`, `context_recall`, `noise_sensitivity`, `semantic_similarity` | Menyimpan setiap pasang tanya-jawab beserta seluruh metrik evaluasi RAGAS + SAS dalam kolom bertipe FLOAT yang terstruktur. Kolom evaluasi bernilai NULL jika sesi tidak mengaktifkan evaluasi. |
+| **`chat_history`**  | `id`, `session_id`, `user_id`, `user_query`, `llm_response`, `metadata` (JSONB), `is_evaluated`, `faithfulness`, `answer_relevance`, `context_precision`, `context_recall`, `semantic_similarity` | Menyimpan setiap pasang tanya-jawab beserta metrik evaluasi RAGAS (4 metrik) + SAS dalam kolom bertipe FLOAT yang terstruktur. Kolom evaluasi bernilai NULL jika sesi tidak mengaktifkan evaluasi. |
 | **`chunks_perdes`** | `id`, `file_name`, `content`, `metadata` (JSONB), `created_at`                                                                                                                                                         | Tabel opsional untuk menyimpan hasil chunking dokumen di sisi PostgreSQL                                                                                                                        |
 
 ## Supabase (PostgreSQL + pgvector) — Vector Store
@@ -823,8 +796,8 @@ Sistem menggunakan dua database yang terpisah berdasarkan fungsinya:
 | **Supabase**               | `supabase-py` SDK             | Vector store (pgvector) dan query similarity search            |
 | **HuggingFace Router API** | HTTP POST (OpenAI-compatible) | Inference model LLM open-source (Llama, Qwen, DeepSeek)        |
 | **Maia Router API**        | HTTP POST (OpenAI-compatible) | Inference model cloud (GPT-4o-mini, GPT-3.5-turbo, Gemini)     |
-| **B200 RAFT Server**       | HTTP POST (`/api/chat-rag`)   | Inference model RAFT fine-tuned lokal di server GPU dedicated  |
-| **HF Reranker API**        | HTTP POST                     | Cross-encoder BAAI/bge-reranker-v2-m3 untuk re-ranking dokumen |
+| **B200 RAFT Server**       | HTTP POST (`/chat-raft`)       | Inference model RAFT fine-tuned lokal di server GPU dedicated  |
+| **Reranker Lokal**        | In-process (`sentence-transformers`) | Cross-encoder `cross-encoder/ms-marco-MiniLM-L6-v2` untuk re-ranking dokumen (tanpa API eksternal) |
 
 ---
 
@@ -858,15 +831,15 @@ Sistem menggunakan dua database yang terpisah berdasarkan fungsinya:
 
 **Tantangan:** Model LLM cenderung mengarang jawaban (_hallucinate_) saat tidak ada dokumen yang benar-benar relevan dengan pertanyaan di vector database.
 
-**Solusi:** Implementasi **Confidence Threshold** berbasis skor cross-encoder (MS Marco BAAI/bge-reranker-v2-m3). Jika skor relevansi tertinggi dari hasil re-ranking berada di bawah threshold (-5.0), sistem langsung mengembalikan respons "tidak ditemukan" tanpa meneruskan ke LLM, sehingga hallucination dapat dicegah sepenuhnya.
+**Solusi:** Implementasi **Confidence Threshold** berbasis skor cross-encoder lokal (`cross-encoder/ms-marco-MiniLM-L6-v2`). Jika skor relevansi tertinggi dari hasil re-ranking berada di bawah threshold (-5.0), sistem langsung mengembalikan respons "tidak ditemukan" tanpa meneruskan ke LLM, sehingga hallucination dapat dicegah sepenuhnya.
 
 ---
 
 ### 5. Integrasi RAFT Model dengan Format Response yang Berbeda
 
-**Tantangan:** Model RAFT fine-tuned memiliki format input/output yang berbeda dari model standar (tidak menggunakan system prompt, menerima daftar dokumen mentah, menghasilkan `jawaban` + `analisis` bukan `choices[0].message.content`).
+**Tantangan:** Model RAFT fine-tuned memiliki format input/output yang berbeda dari model standar (tidak menggunakan system prompt, menerima daftar dokumen mentah, menghasilkan `answer` + `thought` bukan `choices[0].message.content`).
 
-**Solusi:** Implementasi `HuggingFaceService` dengan **abstraksi multi-model** yang mendeteksi tipe model (`raft`, `openai`, `original`) dan menerapkan routing logic yang sesuai. Response RAFT di-standardisasi ke format OpenAI-compatible sebelum dikembalikan, dan metadata analisis disimpan secara terpisah melalui `_raft_metadata_out` pattern.
+**Solusi:** Implementasi `HuggingFaceService` dengan **abstraksi multi-model** yang mendeteksi tipe model (`raft`, `openai`, `original`) dan menerapkan routing logic yang sesuai. Endpoint RAFT adalah `{FINETUNED_API_URL}/chat-raft` dengan payload `{"question", "documents"}`. Response RAFT di-standardisasi ke format OpenAI-compatible sebelum dikembalikan, dan metadata analisis (`analisis`, `konteks_dipilih`, `konteks_ditolak`) disimpan secara terpisah melalui `_raft_metadata_out` pattern.
 
 ---
 
@@ -876,6 +849,8 @@ Sistem menggunakan dua database yang terpisah berdasarkan fungsinya:
 
 **Solusi:** Implementasi **Adjacent Chunk Expansion** yang secara otomatis mengambil chunk tetangga (sebelum dan sesudah) dari Supabase menggunakan `(document_id, chunk_index)` sebagai kunci. Query batch dilakukan per dokumen untuk efisiensi, dan hasilnya disusun dengan label "Konteks Sebelumnya" / "Bagian Utama" / "Konteks Berikutnya" agar LLM dapat memahami posisi setiap bagian.
 
+> ⚠️ **Status saat ini:** Fitur ini **dinonaktifkan sementara** — di `rag_service.py`, `adjacent_map = {}` di-hardcode sehingga `fetch_adjacent_chunks()` tidak dijalankan. Dimatikan untuk keperluan eksperimen/perbandingan.
+
 ---
 
 # Components and Implementation
@@ -884,7 +859,7 @@ Seluruh komponen backend pada proyek ini dirancang, diimplementasikan, dan dikel
 
 - **Perancangan Arsitektur Sistem:** Merancang keseluruhan arsitektur backend berlapis (_layered architecture_) dengan pemisahan yang jelas antara Handler, Use Case, dan Service layer, serta penetapan dua sistem database (PostgreSQL relasional + Supabase pgvector) sesuai kebutuhan tiap jenis data.
 
-- **Implementasi Advanced RAG Pipeline:** Membangun pipeline RAG 5-tahap dari nol (_scratch_): Query Rewriting → Vector Retrieval → Cross-Encoder Reranking → Adjacent Chunk Expansion → Multi-Model Generation, termasuk seluruh logika _confidence thresholding_ dan _hallucination prevention_.
+- **Implementasi Advanced RAG Pipeline:** Membangun pipeline RAG dari nol (_scratch_): Query Rewriting → Vector Retrieval → Cross-Encoder Reranking (lokal `ms-marco-MiniLM-L6-v2`) → Adjacent Chunk Expansion (saat ini dinonaktifkan sementara) → Multi-Model Generation, termasuk seluruh logika _confidence thresholding_ dan _hallucination prevention_.
 
 - **Legal Document Preprocessing Engine:** Membangun `preprocessing_service.py` yang komprehensif untuk menangani variasi format dokumen peraturan desa dari 120+ PDF dengan berbagai layout. Pipeline cleaning 9-tahap mencakup perbaikan OCR spacing, spaced-keyword normalization, `_merge_broken_lines()`, `_normalize_letter_numbering()`, dan metadata extraction berbasis `header_block`. Mendukung **PREVIEW MODE** (`save_to_db=False`) untuk validasi hasil chunking tanpa menyentuh database.
 
@@ -892,10 +867,10 @@ Seluruh komponen backend pada proyek ini dirancang, diimplementasikan, dan dikel
 
 - **RAFT Model Integration:** Mengintegrasikan model fine-tuned RAFT (_Retrieval-Augmented Fine-Tuning_) yang dilatih khusus untuk domain peraturan desa, termasuk penanganan format input/output khusus dan ekstraksi _thought process_ analisis dari model.
 
-- **RAGAS Evaluation Framework:** Mengimplementasikan sistem evaluasi otomatis menggunakan RAGAS dengan 5 metrik kualitas RAG, termasuk integrasi ke database untuk persisten penyimpanan hasil evaluasi dan flag per-sesi yang dapat dikontrol frontend.
+- **RAGAS Evaluation Framework:** Mengimplementasikan sistem evaluasi otomatis menggunakan RAGAS dengan 4 metrik kualitas RAG (faithfulness, answer_relevancy, context_precision, context_recall) + SAS, termasuk integrasi ke database untuk persisten penyimpanan hasil evaluasi dan flag per-sesi yang dapat dikontrol frontend. (Inline LLM-as-a-Judge telah dinonaktifkan agar respons murni dari model.)
 
 - **Database Schema Design:** Merancang schema PostgreSQL yang mencakup manajemen user, sesi percakapan, riwayat chat, dan skema evaluasi metrik RAGAS yang efisien, serta SQL function `match_documents` kustom untuk vector similarity search di Supabase.
 
-- **RAFT Dataset Generation:** Merancang dan menjalankan pipeline pembuatan dataset RAFT v4 (`raft_dataset_v4_production.jsonl`) dari dokumen peraturan desa untuk keperluan fine-tuning model. Pipeline mencakup embedding cache, answerability check, 4 jenis distractor (normal, hard*negative, near_miss, completely_absent), quality gate `is_bad_sample()`, dan format sampel dengan \_thought process* + _natural completion_ yang terpisah.
+- **RAFT Dataset Generation:** Merancang dan menjalankan pipeline pembuatan dataset RAFT v2 (`raft_dataset_retrieval_grounded_*.jsonl`) yang **retrieval-grounded** — mengambil dokumen langsung dari Vector DB (Supabase) dengan pipeline sama seperti inference (Top-10 → Re-ranking → Top-5), lalu menghasilkan `instruction` / `thought_process` (terstruktur: `document_analysis` + `summary`) / `completion` via GPT-4o-mini. Terdapat juga notebook negatif terpisah (`negative_generate_raft_datase.py`) untuk distractor kuat.
 
 ---
