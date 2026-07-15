@@ -6,9 +6,9 @@ from app.services.embedding_service import (
     delete_document_chunks
 )
 
-def ingest_pdf_to_vector_db(file_path: str, original_filename: str, save_to_db: bool = True):
+def ingest_pdf_to_vector_db(file_path: str, original_filename: str, save_to_db: bool = True, is_distractor: bool = False):
     try:
-        chunks = extract_and_chunk_pdf(file_path, save_to_db)
+        chunks = extract_and_chunk_pdf(file_path, save_to_db, is_distractor)
         
         for chunk in chunks:
             chunk.metadata['source_file'] = original_filename

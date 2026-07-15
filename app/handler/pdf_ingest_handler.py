@@ -13,6 +13,9 @@ def handle_generate_embedding():
 
     save_to_db_str = request.form.get('save_to_db', 'true').lower()
     save_to_db = save_to_db_str in ['true', '1', 'yes']
+    
+    is_distractor_str = request.form.get('is_distractor', 'false').lower()
+    is_distractor = is_distractor_str in ['true', '1', 'yes']
         
     if file and file.filename.endswith('.pdf'):
         filename = secure_filename(file.filename)
@@ -23,7 +26,7 @@ def handle_generate_embedding():
         
         file.save(filepath)
         
-        result = ingest_pdf_to_vector_db(filepath, filename, save_to_db)
+        result = ingest_pdf_to_vector_db(filepath, filename, save_to_db, is_distractor)
         
         if os.path.exists(filepath):
             os.remove(filepath)

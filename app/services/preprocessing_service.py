@@ -182,7 +182,7 @@ def clean_legal_text(text: str) -> str:
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text
     
-def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
+def extract_perdes_metadata(file_path: str, full_text: str, is_distractor: bool = False) -> dict:
     village_name = "unknown"
     regency_name = "unknown"
     perdes_number = "unknown"
@@ -280,7 +280,10 @@ def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
     except Exception as e:
         logger.warning(f"Gagal mengekstrak metadata perdes: {e}")
     
-    document_id = f"perdes_dis{village_name}_{perdes_number}_{perdes_year}"
+    if is_distractor:
+        document_id = f"perdes_dis{village_name}_{perdes_number}_{perdes_year}"
+    else:
+        document_id = f"perdes_{village_name}_{perdes_number}_{perdes_year}"
     document_title = f"Peraturan Desa {village_name.title()} No. {perdes_number} Tahun {perdes_year} - {perdes_title.title()}"
     
     return {
@@ -293,7 +296,7 @@ def extract_perdes_metadata(file_path: str, full_text: str) -> dict:
         "document_title": document_title
     }
 
-def extract_text_from_pdf(file_path: str):
+def extract_text_from_pdf(file_path: str, is_distractor: bool = False):
     try:
         pdf_doc = fitz.open(file_path)
     except Exception as e:
@@ -330,7 +333,7 @@ def extract_text_from_pdf(file_path: str):
         return []
     
     full_raw_text = "\n\n".join([text for _, text in raw_pages])
-    perdes_meta = extract_perdes_metadata(file_path, full_raw_text)
+    perdes_meta = extract_perdes_metadata(file_path, full_raw_text, is_distractor)
     clean_text = clean_legal_text(full_raw_text)
     
     if not clean_text:
@@ -346,7 +349,8 @@ def extract_text_from_pdf(file_path: str):
     
     enriched_text = f"{context_header}\n\n{clean_text}"
     
-    raw_output_dir = os.path.join(os.getcwd(), 'data', 'processed', "data")
+    dir_name = "distraktor" if is_distractor else "raw"
+    raw_output_dir = os.path.join(os.getcwd(), 'data', 'processed', dir_name)
     os.makedirs(raw_output_dir, exist_ok=True)
     canonical_base = _canonical_output_basename(file_path)
     raw_path = os.path.join(raw_output_dir, f"{canonical_base}_raw.txt")
@@ -666,8 +670,9 @@ def chunk_documents(documents: list):
             all_chunks.append(Document(page_content=enriched, metadata=chunk_meta))
     return all_chunks
 
-def save_results_to_folder(file_path: str, extracted_docs: list, chunks: list):
-    output_dir = os.path.join(os.getcwd(), 'data', 'processed')
+def save_results_to_folder(file_path: str, extracted_docs: list, chunks: list, is_distractor: bool = False):
+    dir_name = "distraktor" if is_distractor else "raw"
+    output_dir = os.path.join(os.getcwd(), 'data', 'processed', dir_name)
     os.makedirs(output_dir, exist_ok=True)
 
     canonical_base = _canonical_output_basename(file_path)
@@ -752,11 +757,11 @@ def save_chunks_to_postgres(chunks: list) -> bool:
         if conn is not None: conn.close()
 
 
-def extract_and_chunk_pdf(file_path: str, save_to_db: bool = True):
-    documents = extract_text_from_pdf(file_path)
+def extract_and_chunk_pdf(file_path: str, save_to_db: bool = True, is_distractor: bool = False):
+    documents = extract_text_from_pdf(file_path, is_distractor)
     chunks = chunk_documents(documents)
     
-    save_results_to_folder(file_path, documents, chunks)
+    save_results_to_folder(file_path, documents, chunks, is_distractor)
     
     if save_to_db:
         postgres_saved = save_chunks_to_postgres(chunks)
