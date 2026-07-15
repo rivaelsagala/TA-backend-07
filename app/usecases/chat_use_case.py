@@ -186,8 +186,8 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             "status": "success",
             "message": "Jawaban berhasil diproses",
             "answer": rag_result["answer"],
-            "sources": cleaned_sources,
             "evaluation": evaluation_result,
+            "sources": cleaned_sources,
             "model_used": rag_result.get("model_used", "Unknown Model"),
             "retrieval_time": rag_result.get("retrieval_time"),
             "inference_time": rag_result.get("inference_time")
@@ -199,6 +199,8 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             response_body["konteks_dipilih"] = rag_result["konteks_dipilih"]
         if rag_result.get("konteks_ditolak"):
             response_body["konteks_ditolak"] = rag_result["konteks_ditolak"]
+        if rag_result.get("judge_evaluation"):
+            response_body["judge_evaluation"] = rag_result["judge_evaluation"]
         
         return response_body, 200
 

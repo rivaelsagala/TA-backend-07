@@ -160,7 +160,7 @@ class RagasEvaluationService:
             base_url=self.base_url,
             model="openai/gpt-4o-mini",  
             temperature=0.0,
-            max_tokens=2000,
+            max_tokens=1024,
             default_headers={"User-Agent": "curl/7.68.0"}
         )
         
@@ -251,7 +251,6 @@ class RagasEvaluationService:
             
 
             
-            logger.info(f"Evaluation completed: {formatted_result}")
             return formatted_result
             
         except Exception as e:

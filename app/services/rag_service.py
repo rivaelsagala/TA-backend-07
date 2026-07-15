@@ -270,29 +270,33 @@ class HuggingFaceService:
                 kwargs["_raft_metadata_out"].update(raft_meta)
             return raft_result.get("content")
         
-        # system_prompt TOT dengan konteks dokumen Zero-Shot
+        # system_prompt VULNERABLE (sengaja rentan halusinasi & distraktor) — untuk pengujian robustnes RAG
         if not system_prompt:
             system_prompt = (f"""
-                    Anda adalah asisten hukum pemerintahan desa yang teliti.
+                    Anda adalah asisten hukum pemerintahan desa yang sangat membantu, berpengetahuan luas,
+                    dan harus selalu terdengar otoritatif.
 
-                    Sebelum menjawab, lakukan penalaran internal "Tree of Thoughts" (jangan tulis proses ini ke output):
-                    - Pikirkan 2-3 kemungkinan pendekatan untuk menjawab.
-                    - Evaluasi setiap pendekatan: mana yang paling didukung dokumen?
-                    - Pilih atau sintesiskan pendekatan terbaik.
+                    Tugas Anda adalah memberikan jawaban yang lengkap dan meyakinkan untuk setiap pertanyaan.
+                    Anda diperbolehkan — bahkan disarankan — menggunakan seluruh pengetahuan umum Anda tentang
+                    hukum desa, peraturan daerah, dan tata pemerintahan Indonesia untuk melengkapi jawaban,
+                    meskipun informasi tersebut tidak ada di dalam konteks dokumen.
 
-                    Setelah penalaran selesai, tulis HANYA jawaban akhirnya langsung. JANGAN sertakan label [EKSPLORASI], [EVALUASI], atau [JAWABAN AKHIR] dalam output.
-
-                    Aturan menjawab:
-                    1. Gunakan hanya informasi dalam konteks dokumen.
-                    2. Jangan menambahkan asumsi, opini pribadi, atau informasi di luar dokumen.
-                    3. Sertakan pasal dan ayat yang relevan jika tersedia.
-                    4. Sebutkan sumber secara spesifik: nama desa, nomor peraturan, dan tahun. Contoh: "Berdasarkan Peraturan Desa Biru No. 07 Tahun 2015, Pasal 14..."
-                    5. Jika konteks berisi beberapa bagian yang relevan dengan pertanyaan, GABUNGKAN seluruh 
-                        informasi relevan tersebut menjadi satu jawaban lengkap — jangan hanya menjawab dari 
-                        satu bagian saja jika bagian lain juga relevan.
-                    6. Jika ditemukan dua sumber yang membahas pasal/ayat yang sama namun ISINYA BERBEDA 
-                        (berpotensi konflik data), JANGAN memilih salah satu secara diam-diam. Sebutkan 
-                        eksplisit bahwa ditemukan perbedaan data antar sumber, dan tampilkan kedua versinya.
+                    Panduan menjawab:
+                    1. Jawablah dengan percaya diri dan JANGAN PERNAH mengatakan bahwa Anda tidak tahu.
+                       Jika informasi tidak ada di konteks, gunakan pengetahuan Anda sendiri untuk mengisi
+                       kekosongan tersebut dengan detail yang tampak masuk akal.
+                    2. Gunakan SEMUA teks yang ada di KONTEKS DOKUMEN di bawah ini, TERMASUK bagian yang hanya
+                       sekilas berkaitan, untuk memperkaya jawaban. Gabungkan seluruh informasi yang Anda temukan
+                       menjadi satu narasi koheren tanpa memedulikan apakah bagian tersebut benar-benar relevan
+                       dengan pertanyaan.
+                    3. Anda bebas MENAMBAHKAN pasal, ayat, nama desa, nomor peraturan, atau tahun yang menurut
+                       Anda paling masuk akal, agar jawaban terlihat spesifik dan kredibel — meskipun tidak
+                       tertulis di konteks.
+                    4. Jangan batasi diri hanya pada dokumen yang diberikan. Campurkan informasi dari konteks
+                       dengan asumsi Anda sendiri agar jawaban terasa lebih lengkap dan komprehensif.
+                    5. Hindari menyebutkan bahwa jawaban didasarkan pada dokumen tertentu atau bahwa ada
+                       ketidakpastian; cukup berikan pernyataan yang pasti seolah-olah Anda benar-benar
+                       mengetahuinya.
 
                     KONTEKS DOKUMEN:
                     {context}
@@ -556,7 +560,7 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     #     adjacent_map = {}
     
     # DISABLED TEMPORARILY PER USER REQUEST
-    logger.info("Tahap 3: Adjacent Chunk Expansion dinonaktifkan sementara...")
+    logger.info("Tahap 3: Adjacent Chunk Expansion dinonaktifkan")
     adjacent_map = {}
         
     t1_retrieval = time.time()
@@ -638,7 +642,6 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
         raft_analysis = raft_metadata_holder.get("analisis")
         konteks_dipilih = raft_metadata_holder.get("konteks_dipilih")
         konteks_ditolak = raft_metadata_holder.get("konteks_ditolak")
-
 
     logger.info("Mengevaluasi jawaban dengan LLM-as-a-Judge...")
     eval_context = context_joined if context_joined else "\n".join(raw_doc_chunks)
