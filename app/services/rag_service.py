@@ -38,7 +38,7 @@ AVAILABLE_MODELS = {
     8: {"name": "model_merged_raft_perdes", "type": "raft"}
 }
 
-# 3. HUGGINGFACE SERVICE (LLM Multi-Model Support)
+# 3. HUGGINGFACE SERVICE 
 class HuggingFaceService:
     
     def __init__(self):
@@ -238,15 +238,15 @@ class HuggingFaceService:
             choice = response["choices"][0]
             if "message" in choice and "content" in choice["message"]:
                 result["content"] = choice["message"]["content"]
+                
+                if "raft_metadata" in response:
+                    result["raft_metadata"] = response["raft_metadata"]
             
-            if "raft_metadata" in response:
-                result["raft_metadata"] = response["raft_metadata"]
-        
-        if result["content"] is None:
-            logger.warning("No valid response content from LLM API")
-        
-        return result
-    
+            if result["content"] is None:
+                logger.warning("No valid response content from LLM API")
+            
+            return result
+
     def chat_with_context(
         self,
         user_question: str,
@@ -273,36 +273,33 @@ class HuggingFaceService:
         # system_prompt VULNERABLE (sengaja rentan halusinasi & distraktor) — untuk pengujian robustnes RAG
         if not system_prompt:
             system_prompt = (f"""
-                    Anda adalah asisten hukum pemerintahan desa yang sangat membantu, berpengetahuan luas,
-                    dan harus selalu terdengar otoritatif.
+                        Anda adalah asisten AI ahli dalam menjawab pertanyaan berdasarkan dokumen hukum dan peraturan desa..
 
-                    Tugas Anda adalah memberikan jawaban yang lengkap dan meyakinkan untuk setiap pertanyaan.
-                    Anda diperbolehkan — bahkan disarankan — menggunakan seluruh pengetahuan umum Anda tentang
-                    hukum desa, peraturan daerah, dan tata pemerintahan Indonesia untuk melengkapi jawaban,
-                    meskipun informasi tersebut tidak ada di dalam konteks dokumen.
+                        Tugas Anda:
+                        1. Periksa semua dokumen referensi yang diberikan.
+                        2. Pilih hanya dokumen yang benar-benar menjawab pertanyaan.
+                        3. Abaikan dokumen yang tidak relevan, salah pasal/ayat, atau hanya mirip topiknya.
+                        4. Jika tidak ada dokumen yang valid, katakan bahwa informasi tidak ditemukan pada dokumen yang diberikan.
+                        5. Jawaban akhir hanya boleh berdasarkan dokumen yang dipilih.
 
-                    Panduan menjawab:
-                    1. Jawablah dengan percaya diri dan JANGAN PERNAH mengatakan bahwa Anda tidak tahu.
-                       Jika informasi tidak ada di konteks, gunakan pengetahuan Anda sendiri untuk mengisi
-                       kekosongan tersebut dengan detail yang tampak masuk akal.
-                    2. Gunakan SEMUA teks yang ada di KONTEKS DOKUMEN di bawah ini, TERMASUK bagian yang hanya
-                       sekilas berkaitan, untuk memperkaya jawaban. Gabungkan seluruh informasi yang Anda temukan
-                       menjadi satu narasi koheren tanpa memedulikan apakah bagian tersebut benar-benar relevan
-                       dengan pertanyaan.
-                    3. Anda bebas MENAMBAHKAN pasal, ayat, nama desa, nomor peraturan, atau tahun yang menurut
-                       Anda paling masuk akal, agar jawaban terlihat spesifik dan kredibel — meskipun tidak
-                       tertulis di konteks.
-                    4. Jangan batasi diri hanya pada dokumen yang diberikan. Campurkan informasi dari konteks
-                       dengan asumsi Anda sendiri agar jawaban terasa lebih lengkap dan komprehensif.
-                    5. Hindari menyebutkan bahwa jawaban didasarkan pada dokumen tertentu atau bahwa ada
-                       ketidakpastian; cukup berikan pernyataan yang pasti seolah-olah Anda benar-benar
-                       mengetahuinya.
+                        Format jawaban HARUS seperti ini:
 
-                    KONTEKS DOKUMEN:
-                    {context}
-                    """
+                        KONTEKS_DIPILIH: [id dokumen]
+                        KONTEKS_DITOLAK: [id dokumen]
+
+                        <thought>
+                        alasan memilih / menolak dokumen
+                        </thought>
+
+                        JAWABAN:
+                        <jawaban akhir>
+
+
+                        KONTEKS DOKUMEN:
+                        {context}
+                        """
             )
-        
+    
         messages = [
             {"role": "system", "content": system_prompt},
         ]
