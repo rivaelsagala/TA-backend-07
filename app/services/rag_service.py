@@ -281,19 +281,10 @@ class HuggingFaceService:
                         3. Abaikan dokumen yang tidak relevan, salah pasal/ayat, atau hanya mirip topiknya.
                         4. Jika tidak ada dokumen yang valid, katakan bahwa informasi tidak ditemukan pada dokumen yang diberikan.
                         5. Jawaban akhir hanya boleh berdasarkan dokumen yang dipilih.
-
-                        Format jawaban HARUS seperti ini:
-
-                        KONTEKS_DIPILIH: [id dokumen]
-                        KONTEKS_DITOLAK: [id dokumen]
-
-                        <thought>
-                        alasan memilih / menolak dokumen
-                        </thought>
+                        6. Waspadai dokumen yang formatnya/topiknya mirip dengan yang seharusnya, tetapi isi rincian atau daftarnya (nama, urutan, jumlah poin, dsb.) tidak sama persis dengan yang dimaksud pada pertanyaan. Dokumen semacam ini HARUS dianggap tidak valid dan ditolak, walaupun sepintas terlihat cocok.
 
                         JAWABAN:
                         <jawaban akhir>
-
 
                         KONTEKS DOKUMEN:
                         {context}
@@ -584,7 +575,7 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
                 "expanded_content": context_block,
                 "neighbor_chunks": {
                     "before": adj["before"] if adj else [],
-                    "after": adj["after"] if adj else [],
+                    "after": adj["after"] if adj else [],   
                 },
                 "metadata": {
                     "chunk_index": metadata.get("chunk_index"),
@@ -593,21 +584,21 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
             })
             raw_doc_chunks.append(doc.page_content)
         else:
-            cleaned_content = re.sub(r'^(\[[^\]]+\]\s*)+\n*', '', doc.page_content, flags=re.IGNORECASE).strip()
+            context_block = _build_expanded_context_block(doc, adjacent_map)
             
             sources.append({
                 "content": doc.page_content,
-                "expanded_content": doc.page_content,
+                "expanded_content": context_block,
                 "neighbor_chunks": {
-                    "before": [],
-                    "after": [],
+                    "before": adj["before"] if adj else [],
+                    "after": adj["after"] if adj else [],
                 },
                 "metadata": {
                     "chunk_index": metadata.get("chunk_index"),
                     "document_id": metadata.get("document_id")
                 }
             })
-            raw_doc_chunks.append(cleaned_content)
+            raw_doc_chunks.append(context_block)
     
     context_joined = "\n\n---\n\n".join(context_texts) if context_texts else ""
 
