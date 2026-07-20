@@ -389,12 +389,12 @@ def _parse_perdes_sections(text: str) -> list:
         lower_line = line.strip().lower()
         
         if not is_content_started:
-            if re.match(r'^(menetapkan|memutuskan|bab\s+i|pasal\s+1)\b', lower_line):
+            if re.match(r'^(menetapkan|memutuskan|bab\s+[ivxlcdm\d]+|pasal\s+\d+)\b', lower_line):
                 is_content_started = True
                 
         if is_content_started:
             if re.match(r'^\s*pasal\s+\d+(?:[\.\:\s]+.*)?$', lower_line):
-                if not re.search(r'\b(sampai\s+dengan|sebagaimana|tentang)\b', lower_line):
+                if not re.match(r'^\s*pasal\s+\d+[\.\:\s]+(sampai\s+dengan|sebagaimana|tentang)\b', lower_line):
                     pasal_positions.append(i)
 
     if not pasal_positions:

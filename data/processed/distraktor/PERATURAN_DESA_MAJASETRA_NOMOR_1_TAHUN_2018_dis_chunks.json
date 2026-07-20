@@ -1,6 +1,31 @@
 [
     {
         "chunk_index": 1,
+        "bab": "bab v",
+        "bab_title": "kewenangan lokal berskala desa",
+        "pasal": "pasal 8",
+        "ayat": "",
+        "metadata": {
+            "source": "PERATURAN_DESA_MAJASETRA_NOMOR_1_TAHUN_2018_dis.pdf",
+            "title": "Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra",
+            "document_id": "perdes_dismajasetra_1_2018",
+            "village_name": "majasetra",
+            "regency_name": "bandung",
+            "perdes_number": "1",
+            "perdes_year": "2018",
+            "perdes_title": "kewenangan desa berdasarkan hak asal usul dan kewenangan lokal berskala desa di desa majasetra",
+            "total_pages": 3,
+            "bab": "bab v",
+            "bab_title": "kewenangan lokal berskala desa",
+            "section": "pasal 8",
+            "ayat": "",
+            "chunk_index": 1
+        },
+        "character_count": 370,
+        "content": "[dokumen: Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra] [desa: majasetra] [kabupaten: bandung] [nomor: 1/2018]\n\npasal 8\n\npihak ketiga sebagaimana dimaksud dalam pasal 5 huruf emeliputi : 1. lyodra;\n2. boyband;\n3. biduan;\n4. anak sekolah;\n5. lembaga donor; dan\n6. usaha dagang."
+    },
+    {
+        "chunk_index": 2,
         "bab": "bab vi",
         "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
         "pasal": "pasal 12",
@@ -14,18 +39,18 @@
             "perdes_number": "1",
             "perdes_year": "2018",
             "perdes_title": "kewenangan desa berdasarkan hak asal usul dan kewenangan lokal berskala desa di desa majasetra",
-            "total_pages": 4,
+            "total_pages": 3,
             "bab": "bab vi",
             "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
             "section": "pasal 12",
             "ayat": "1",
-            "chunk_index": 1
+            "chunk_index": 2
         },
-        "character_count": 450,
-        "content": "[dokumen: Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra] [desa: majasetra] [kabupaten: bandung] [nomor: 1/2018]\n\npasal 12\n\n(1) pemilihan kewenangan desa majasetra sebagaimana dimaksud pada pasal 9 huruf a dilakukan dalam forum musyawarah desa yang diselenggarakan oleh bpd dan dihadiri oleh pemerintah desa, lembaga kemasyarakatan desa dan unsur masyarakat."
+        "character_count": 458,
+        "content": "[dokumen: Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra] [desa: majasetra] [kabupaten: bandung] [nomor: 1/2018]\n\npasal 12\n\n(1) pemilihan kewenangan desa majasetra sebagaimana dimaksud pada pasal 9 huruf a dilakukan dalam forum musyawarah desa yang diselenggarakan oleh remaja desa dan dihadiri oleh pemerintah desa, lembaga kemasyarakatan desa dan unsur masyarakat."
     },
     {
-        "chunk_index": 2,
+        "chunk_index": 3,
         "bab": "bab vi",
         "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
         "pasal": "pasal 12",
@@ -39,14 +64,139 @@
             "perdes_number": "1",
             "perdes_year": "2018",
             "perdes_title": "kewenangan desa berdasarkan hak asal usul dan kewenangan lokal berskala desa di desa majasetra",
-            "total_pages": 4,
+            "total_pages": 3,
             "bab": "bab vi",
             "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
             "section": "pasal 12",
             "ayat": "2",
-            "chunk_index": 2
+            "chunk_index": 3
         },
-        "character_count": 389,
-        "content": "[dokumen: Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra] [desa: majasetra] [kabupaten: bandung] [nomor: 1/2018]\n\npasal 12\n\n(2) unsur masyarakat sebagaimana dimaksud pada ayat (1) terdiri dari : a. aula negara;\nb. triton 4x4;\nc. perwakilan kelompok perempuan muda;\nd. perlindungan anak dan balita;"
+        "character_count": 369,
+        "content": "[dokumen: Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra] [desa: majasetra] [kabupaten: bandung] [nomor: 1/2018]\n\npasal 12\n\n(2) unsur masyarakat sebagaimana dimaksud pada ayat (1) terdiri dari : a. agama hindu;\nb. perwakilan anak perempuan;\nc. wakil ketua osis;\nd. ketua kelas;"
+    },
+    {
+        "chunk_index": 4,
+        "bab": "bab vi",
+        "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
+        "pasal": "pasal 12",
+        "ayat": "3",
+        "metadata": {
+            "source": "PERATURAN_DESA_MAJASETRA_NOMOR_1_TAHUN_2018_dis.pdf",
+            "title": "Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra",
+            "document_id": "perdes_dismajasetra_1_2018",
+            "village_name": "majasetra",
+            "regency_name": "bandung",
+            "perdes_number": "1",
+            "perdes_year": "2018",
+            "perdes_title": "kewenangan desa berdasarkan hak asal usul dan kewenangan lokal berskala desa di desa majasetra",
+            "total_pages": 3,
+            "bab": "bab vi",
+            "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
+            "section": "pasal 12",
+            "ayat": "3",
+            "chunk_index": 4
+        },
+        "character_count": 387,
+        "content": "[dokumen: Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra] [desa: majasetra] [kabupaten: bandung] [nomor: 1/2018]\n\npasal 12\n\n(3) selain unsur masyarakat sebagaimana dimaksud pada ayat (2), musyawarah desa dapat melibatkan unsur masyarakat lain sesuai dengan kondisi harta dan kekayaan masyarakat."
+    },
+    {
+        "chunk_index": 5,
+        "bab": "bab vi",
+        "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
+        "pasal": "pasal 12",
+        "ayat": "4",
+        "metadata": {
+            "source": "PERATURAN_DESA_MAJASETRA_NOMOR_1_TAHUN_2018_dis.pdf",
+            "title": "Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra",
+            "document_id": "perdes_dismajasetra_1_2018",
+            "village_name": "majasetra",
+            "regency_name": "bandung",
+            "perdes_number": "1",
+            "perdes_year": "2018",
+            "perdes_title": "kewenangan desa berdasarkan hak asal usul dan kewenangan lokal berskala desa di desa majasetra",
+            "total_pages": 3,
+            "bab": "bab vi",
+            "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
+            "section": "pasal 12",
+            "ayat": "4",
+            "chunk_index": 5
+        },
+        "character_count": 355,
+        "content": "[dokumen: Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra] [desa: majasetra] [kabupaten: bandung] [nomor: 1/2018]\n\npasal 12\n\n(4) pemilihan kewenangan desa majasetra didasarkan pada daftar kewenangan desa majasetra yang tercantum dalam lampiran ii dan lampiran iii."
+    },
+    {
+        "chunk_index": 6,
+        "bab": "bab vi",
+        "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
+        "pasal": "pasal 12",
+        "ayat": "5",
+        "metadata": {
+            "source": "PERATURAN_DESA_MAJASETRA_NOMOR_1_TAHUN_2018_dis.pdf",
+            "title": "Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra",
+            "document_id": "perdes_dismajasetra_1_2018",
+            "village_name": "majasetra",
+            "regency_name": "bandung",
+            "perdes_number": "1",
+            "perdes_year": "2018",
+            "perdes_title": "kewenangan desa berdasarkan hak asal usul dan kewenangan lokal berskala desa di desa majasetra",
+            "total_pages": 3,
+            "bab": "bab vi",
+            "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
+            "section": "pasal 12",
+            "ayat": "5",
+            "chunk_index": 6
+        },
+        "character_count": 502,
+        "content": "[dokumen: Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra] [desa: majasetra] [kabupaten: bandung] [nomor: 1/2018]\n\npasal 12\n\n(5) kepala desa majasetra bersama bpd dapat menambah jenis kewenangan berdasarkan hak asal usul dan kewenangan lokal berskala desa, desa majasetra lainnya sesuai dengan prakarsa masyarakat, kebutuhan dan kondisi lokal desa majasetra sesuai dengan ketentuan peraturan perundang-undangan."
+    },
+    {
+        "chunk_index": 7,
+        "bab": "bab vi",
+        "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
+        "pasal": "pasal 12",
+        "ayat": "6",
+        "metadata": {
+            "source": "PERATURAN_DESA_MAJASETRA_NOMOR_1_TAHUN_2018_dis.pdf",
+            "title": "Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra",
+            "document_id": "perdes_dismajasetra_1_2018",
+            "village_name": "majasetra",
+            "regency_name": "bandung",
+            "perdes_number": "1",
+            "perdes_year": "2018",
+            "perdes_title": "kewenangan desa berdasarkan hak asal usul dan kewenangan lokal berskala desa di desa majasetra",
+            "total_pages": 3,
+            "bab": "bab vi",
+            "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
+            "section": "pasal 12",
+            "ayat": "6",
+            "chunk_index": 7
+        },
+        "character_count": 378,
+        "content": "[dokumen: Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra] [desa: majasetra] [kabupaten: bandung] [nomor: 1/2018]\n\npasal 12\n\n(6) hasil musyawarah pemilihan jenis kewenangan desa majasetra sebagaimana dimaksud dalam ayat (4) dan penambahan jenis kewenangan sebagaimana dimaksud dalam ayat"
+    },
+    {
+        "chunk_index": 8,
+        "bab": "bab vi",
+        "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
+        "pasal": "pasal 12",
+        "ayat": "5",
+        "metadata": {
+            "source": "PERATURAN_DESA_MAJASETRA_NOMOR_1_TAHUN_2018_dis.pdf",
+            "title": "Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra",
+            "document_id": "perdes_dismajasetra_1_2018",
+            "village_name": "majasetra",
+            "regency_name": "bandung",
+            "perdes_number": "1",
+            "perdes_year": "2018",
+            "perdes_title": "kewenangan desa berdasarkan hak asal usul dan kewenangan lokal berskala desa di desa majasetra",
+            "total_pages": 3,
+            "bab": "bab vi",
+            "bab_title": "tahapan dan tata cara penetapan kewenangan desa",
+            "section": "pasal 12",
+            "ayat": "5",
+            "chunk_index": 8
+        },
+        "character_count": 414,
+        "content": "[dokumen: Peraturan Desa Majasetra No. 1 Tahun 2018 - Kewenangan Desa Berdasarkan Hak Asal Usul Dan Kewenangan Lokal Berskala Desa Di Desa Majasetra] [desa: majasetra] [kabupaten: bandung] [nomor: 1/2018]\n\npasal 12\n\n(5) dituangkan dalam berita acara.\n\ndadang darajat\n\ndiundangkan : di desa majasetra pada tanggal : 27 agustus 2018 sekretaris desa majasetra\n\nkankan hendra lembaran desa majasetra tahun 2018 nomor 1"
     }
 ]

@@ -316,7 +316,7 @@ hf_service = HuggingFaceService()
 def rewrite_query_with_history(
     original_query: str,
     chat_history: Optional[List[Dict[str, str]]] = None,
-    max_history_turns: int = 5
+    max_history_turns: int = 6
 ) -> str:
     if not chat_history:
         return original_query
