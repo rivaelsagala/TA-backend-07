@@ -37,7 +37,7 @@
     "user_id": 1,
     "model_id": 1,
     "evaluate": false,
-    "ground_truth": "Berdasarkan dokumen yang tersedia, pertanyaan tidak dapat dijawab karena isi Pasal 3 yang menjelaskan fungsi Badan Permusyawaratan Desa (BPD) tidak terdapat dalam konteks yang diberikan. Dokumen hanya memuat Pasal 1 (definisi BPD), Pasal 2 (kedudukan BPD), dan Pasal 4 (wewenang BPD). Oleh karena itu, informasi mengenai fungsi BPD menurut Pasal 3 tidak tersedia."
+    "ground_truth": "Badan permusyawaratan desa (bpd) di desa cigentur berfungsi membahas dan menyepakati rancangan peraturan desa bersama kepala desa, menampung dan menyalurkan aspirasi masyarakat desa, melakukan pengawasan kinerja kepala desa."
   },
   {
     "message": "Berdasarkan Pasal 4 Peraturan Desa Cigentur Nomor 8 Tahun 2018 tentang Badan Permusyawaratan Desa (BPD), apa saja wewenang Badan Permusyawaratan Desa (BPD) Desa Cigentur?",
@@ -237,7 +237,7 @@
     "user_id": 1,
     "model_id": 1,
     "evaluate": false,
-    "ground_truth": "Berdasarkan Pasal 1 angka 3 Peraturan Desa Cipedes Kecamatan Paseh Kabupaten Bandung No. 03 Tahun 2018, Badan Permusyawaratan Desa (BPD) adalah lembaga yang terdiri dari pemuka-pemuka masyarakat yang ada di desa, menampung dan menyalurkan aspirasi masyarakat, serta melakukan pengawasan terhadap penyelenggaraan pemerintah desa."
+    "ground_truth": "Berdasarkan Pasal 1 Peraturan Desa Cipedes Kecamatan Paseh Kabupaten Bandung No. 03 Tahun 2018, Badan Permusyawaratan Desa (BPD) adalah lembaga yang terdiri dari pemuka-pemuka masyarakat yang ada di desa, menampung dan menyalurkan aspirasi masyarakat, serta melakukan pengawasan terhadap penyelenggaraan pemerintah desa."
   },
   {
     "message": "Apa sih yang dimaksud dengan sarana air bersih?",
