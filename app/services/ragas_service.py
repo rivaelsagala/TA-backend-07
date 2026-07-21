@@ -47,9 +47,7 @@ class SemanticAnswerSimilarity:
             f"SemanticAnswerSimilarity initialized — model: {self.model_name}"
         )
 
-    # ------------------------------------------------------------------
-    # Internal helper
-    # ------------------------------------------------------------------
+
     @staticmethod
     def _cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
         """Hitung cosine similarity antara dua vektor, kembalikan float 0–1."""
@@ -59,13 +57,9 @@ class SemanticAnswerSimilarity:
         norm_b = np.linalg.norm(b)
         if norm_a == 0 or norm_b == 0:
             return 0.0
-        # cosine similarity bisa -1..1; clip ke 0..1 agar konsisten
         raw = float(np.dot(a, b) / (norm_a * norm_b))
         return float(np.clip(raw, 0.0, 1.0))
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
     def compute_sas(
         self,
         answer: str,
@@ -174,7 +168,6 @@ class RagasEvaluationService:
         self.custom_llm = LangchainLLMWrapper(langchain_llm)
         self.custom_embeddings = LangchainEmbeddingsWrapper(langchain_embeddings)
         
-        # Metrik yang akan digunakan
         self.metrics = [
             faithfulness,        
             answer_relevancy,   

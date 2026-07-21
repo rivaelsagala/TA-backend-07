@@ -127,7 +127,6 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
         if not rag_result or not rag_result.get("answer"):
             return {"status": "error", "message": "Gagal mendapatkan respons dari sistem RAG"}, 500
         
-        # Evaluasi RAGAS — hanya dijalankan jika evaluate=True
         evaluation_result = None
         if evaluate:
             logger.info(f"Starting RAGAS evaluation for model_id={model_id} (model={rag_result.get('model_used', 'Unknown')})...")
@@ -153,11 +152,10 @@ def chat_with_history(session_id: int, user_id: int, user_question: str, model_i
             if similarity_score is not None:
                 similarity_score = float(similarity_score)
 
-        # Simpan Pertanyaan, Jawaban, dan Metrik ke dalam PostgreSQL (chat_history)
         metadata = {
             "sources": sources,
             "model_used": rag_result.get("model_used", "Unknown Model"),
-            "analysis": rag_result.get("analysis")  # RAFT thought_process
+            "analysis": rag_result.get("analysis")
         }
         
         chat_service.save_chat_message(

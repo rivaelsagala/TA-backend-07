@@ -35,7 +35,7 @@ AVAILABLE_MODELS = {
     5: {"name": "openai/gpt-4o-mini", "type": "openai"},
     6: {"name": "openai/gpt-3.5-turbo", "type": "openai"},
     7: {"name": "maia/gemini-2.0-flash", "type": "google"},
-    8: {"name": "model_merged_raft_perdes", "type": "raft"}
+    8: {"name": "Llama-3.1-8B-Instruct-Finetune", "type": "raft"}
 }
 
 # 3. HUGGINGFACE SERVICE 
@@ -269,19 +269,17 @@ class HuggingFaceService:
             if raft_meta and "_raft_metadata_out" in kwargs and isinstance(kwargs["_raft_metadata_out"], dict):
                 kwargs["_raft_metadata_out"].update(raft_meta)
             return raft_result.get("content")
-        
-        # system_prompt VULNERABLE (sengaja rentan halusinasi & distraktor) — untuk pengujian robustnes RAG
+
         if not system_prompt:
             system_prompt = (f"""
-                        Anda adalah asisten AI ahli dalam menjawab pertanyaan berdasarkan dokumen hukum dan peraturan desa..
-
-                        Tugas Anda:
-                        1. Periksa semua dokumen referensi yang diberikan.
-                        2. Pilih hanya dokumen yang benar-benar menjawab pertanyaan.
-                        3. Abaikan dokumen yang tidak relevan, salah pasal/ayat, atau hanya mirip topiknya.
-                        4. Jika tidak ada dokumen yang valid, katakan bahwa informasi tidak ditemukan pada dokumen yang diberikan.
-                        5. Jawaban akhir hanya boleh berdasarkan dokumen yang dipilih.
-                        6. Waspadai dokumen yang formatnya/topiknya mirip dengan yang seharusnya, tetapi isi rincian atau daftarnya (nama, urutan, jumlah poin, dsb.) tidak sama persis dengan yang dimaksud pada pertanyaan. Dokumen semacam ini HARUS dianggap tidak valid dan ditolak, walaupun sepintas terlihat cocok.
+                        Anda adalah asisten AI yang menjawab pertanyaan tentang pemerintahan
+                        dan peraturan desa. Gunakan context yang diberikan sebagai referensi utama. 
+                        Jika context mengandung informasi yang relevan dengan pertanyaan, gunakan 
+                        informasi tersebut sebagai konfirmasi dan dasar jawaban.
+                        Jika context tidak relevan atau tidak memiliki informasi yang cukup,
+                        jawab berdasarkan pengetahuan Anda sendiri - dan jika benar-benar tidak tahu, katakan tidak tahu.
+                        Evaluasi semua dokumen; dokumen pertama bukan selalu yang paling relevan.
+                        Jangan mengarang fakta yang tidak didukung context maupun pengetahuan Anda.
 
                         JAWABAN:
                         <jawaban akhir>
@@ -547,7 +545,6 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
     #     logger.info("Tahap 3: Skip Adjacent Chunk Expansion for RAFT model...")
     #     adjacent_map = {}
     
-    # DISABLED TEMPORARILY PER USER REQUEST
     logger.info("Tahap 3: Adjacent Chunk Expansion dinonaktifkan")
     adjacent_map = {}
         

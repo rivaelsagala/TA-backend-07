@@ -213,30 +213,40 @@ def extract_perdes_metadata(file_path: str, full_text: str, is_distractor: bool 
 
         header_block = " ".join(header_lines).upper()
         
-        # 1. Ekstrak nama desa (Lebih tangguh terhadap akhiran NOMOR, NOMOR., atau NO)
-        desa_match = re.search(r'PERATURAN\s+DESA\s+(.*?)\s+(?:NOMOR|NO\b)', header_block)
+        # 1. Ekstrak nama desa
+        desa_match = re.search(
+            r'PERATURAN\s+DESA\s*(?:\([^)]*\)\s*)?(.+?)(?:\s+KECAMATAN|\s+KABUPATEN|\s+NOMOR|\s+NO\b|\s+TENTANG|$)',
+            header_block
+        )
         if desa_match:
             potensi_desa = desa_match.group(1).strip().lower()
-            # Hapus karakter baca/titik/koma jika OCR tidak sengaja menyatukannya
-            potensi_desa = re.sub(r'[\.\:\,\-\;]$', '', potensi_desa).strip()
+            potensi_desa = re.sub(r'[\.\:\,\-\;]+$', '', potensi_desa).strip()
             if len(potensi_desa) < 50:
                 village_name = potensi_desa
                 
         # 2. Fallback "KEPALA DESA" / "PEMERINTAH DESA"
         if village_name == "unknown":
-            fallback_match = re.search(r'(?:KEPALA|PEMERINTAH)\s+DESA\s+(.*?)(?:\s+KECAMATAN|\s+KABUPATEN|\s+PERATURAN|\s+NOMOR|\s+NO\b|$)', header_block)
+            fallback_match = re.search(
+                r'(?:KEPALA|PEMERINTAH)\s+DESA\s+(.+?)(?:\s+KECAMATAN|\s+KABUPATEN|\s+PERATURAN|\s+NOMOR|\s+NO\b|$)',
+                header_block
+            )
+            if not fallback_match:
+                fallback_match = re.search(
+                    r'(?:KEPALA|PEMERINTAH)\s+DESA\s+(.+?)(?:\s+KECAMATAN|\s+KABUPATEN|\s+PERATURAN|\s+NOMOR|\s+NO\b|$)',
+                    normalized_text, re.IGNORECASE
+                )
             if fallback_match:
                 potensi_desa = fallback_match.group(1).strip().lower().rstrip('.,:;')
                 if potensi_desa and len(potensi_desa) < 50:
                     village_name = potensi_desa
 
-        # 3. [PERBAIKAN UTAMA] Ekstrak Nomor dan Tahun 
+        # 3. Ekstrak Nomor dan Tahun 
         nomor_match = re.search(r'(?:NOMOR|NO)\s*[\.\:\-,]?\s*(\d+)\s*TAHUN\s*[\.\:\-,]?\s*(\d{4})', header_block)
         if nomor_match:
             perdes_number = nomor_match.group(1)
             perdes_year = nomor_match.group(2)
 
-        # 4. [PERBAIKAN FITUR] Ekstrak Judul menggunakan RegEx pada header_block
+        # 4. Ekstrak Judul menggunakan RegEx pada header_block
         tentang_match = re.search(r'TENTANG\s+(.*?)(?:\s+DENGAN\s+RAHMAT|\s+KEPALA\s+DESA|\s+MENIMBANG)', header_block)
         if tentang_match:
             potensi_judul = tentang_match.group(1).strip().lower()
@@ -255,7 +265,7 @@ def extract_perdes_metadata(file_path: str, full_text: str, is_distractor: bool 
                     if title_lines:
                         perdes_title = " ".join(title_lines).lower()
                         
-        # 5. Ekstrak Kabupaten / Kota (Sama dengan aslinya)
+        # 5. Ekstrak Kabupaten / Kota
         regency_candidates = re.findall(r'kabupaten\s+([a-zA-Z]+)', full_text, re.IGNORECASE)
         if regency_candidates:
             stop_words = {'yang', 'dan', 'atau', 'dari', 'di', 'ke', 'pada', 
