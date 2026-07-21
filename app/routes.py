@@ -1,6 +1,5 @@
 from flask import Blueprint
 from app.handler.pdf_ingest_handler import handle_generate_embedding
-# from app.handler.evaluation_handler import handle_evaluate_response
 from app.handler.chat_handler import (
     handle_chat,
     handle_create_session,
@@ -27,7 +26,7 @@ bp.add_url_rule('/api/generate-embedding', 'generate_embedding', handle_generate
 # Endpoint Model Management
 bp.add_url_rule('/api/models', 'get_model_info', handle_get_model_info, methods=['GET'])
 
-# Endpoint Chat dan Riwayat Session (Tersimpan di DB)
+# Endpoint Chat
 bp.add_url_rule('/api/chat', 'chat', handle_chat, methods=['POST'])
 bp.add_url_rule('/api/chat-sessions', 'create_session', handle_create_session, methods=['POST'])
 bp.add_url_rule('/api/chat-sessions', 'get_sessions', handle_get_sessions, methods=['GET'])

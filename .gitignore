@@ -85,3 +85,5 @@ documentation/
 # Dockerfile
 # docker-compose*.yml
 # .dockerignore
+
+PROJECT_DOCUMENTATION.md

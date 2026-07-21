@@ -301,6 +301,42 @@ Mode Opsional:
   save_to_db=True   → Mode normal: simpan ke PostgreSQL (chunks_perdes)
 ```
 
+### Penjelasan Rinci Modul `preprocessing_service.py`
+
+Modul `preprocessing_service.py` bertanggung jawab atas keseluruhan proses persiapan data dokumen hukum (Peraturan Desa) sebelum di-embedding dan disimpan ke dalam database. Modul ini dirancang secara khusus untuk menangani struktur format peraturan perundang-undangan di Indonesia, dan terdiri dari beberapa fungsi krusial:
+
+1. **`clean_legal_text(text: str) -> str`**
+   Fungsi ini membersihkan teks mentah hasil ekstraksi PDF melalui 9 tahapan pembersihan khusus dokumen hukum:
+   - **Tahap 1 & 1.5:** Normalisasi karakter unicode, perbaikan spasi yang salah akibat OCR (menggabungkan huruf yang terpisah kecuali kata depan valid), dan perbaikan typo spesifik _preamble_ ("menginat" menjadi "mengingat").
+   - **Tahap 2:** Konversi teks menjadi huruf kecil (_lowercase_).
+   - **Tahap 3 & 4:** Memperbaiki kata kunci hukum yang terpisah spasi (seperti "P A S A L") menjadi satu kata yang utuh, serta menghapus karakter-karakter _noise_ non-alfanumerik yang dihasilkan oleh kesalahan OCR.
+   - **Tahap 5:** Normalisasi whitespace dan penggabungan baris yang terputus (_broken lines_). Fungsi akan menganalisis baris-baris yang tidak diakhiri tanda baca dan menggabungkannya jika bukan awal dari bagian struktural baru.
+   - **Tahap 6, 7 & 8:** Penghapusan artefak PDF, header/footer berulang, dan blok tanda tangan (seperti "ditetapkan di...", nama desa, tulisan salinan).
+   - **Tahap 9 & Akhir:** Menghilangkan kata hubung tunggal di awal baris dan membuang teks lampiran yang berlebihan setelah klausul penutup resmi.
+
+2. **`extract_perdes_metadata(file_path, full_text, is_distractor) -> dict`**
+   Mengekstrak metadata penting dari teks lengkap Peraturan Desa menggunakan berbagai pola _Regular Expression_ (Regex). Metadata yang diekstrak meliputi: nama desa, nama kabupaten/kota, nomor peraturan, tahun, dan judul peraturan. Ekstraksi difokuskan pada bagian _header_ (25 baris pertama). Jika flag `is_distractor` bernilai `True`, fungsi akan menambahkan prefix `perdes_dis` pada ID dokumen, yang menandakannya sebagai dokumen _distractor_ untuk keperluan pembuatan dataset RAFT.
+
+3. **`extract_text_from_pdf(file_path, is_distractor) -> list`**
+   Fungsi ini membaca file PDF halaman demi halaman menggunakan library `fitz` (PyMuPDF). Jika teks yang diekstrak dari suatu halaman terlalu sedikit (kurang dari 50 karakter), fungsi ini mengasumsikan halaman tersebut adalah hasil scan gambar dan akan **otomatis melakukan _fallback_ menggunakan OCR** (`pytesseract`) untuk mengekstrak teks dari gambar halaman tersebut. Teks yang didapat kemudian digabungkan, dibersihkan dengan `clean_legal_text`, dan diperkaya dengan string _context header_ di awal teks.
+
+4. **`_parse_perdes_sections(text: str) -> list`**
+   Ini adalah inti dari proses **_Semantic Legal-Aware Chunking_**. Fungsi ini mengurai teks hukum yang sangat panjang menjadi potongan-potongan terstruktur logis berdasarkan hierarki: BAB, Bagian, Pasal, Ayat, dan Butir.
+   - Fungsi mengidentifikasi awal BAB, Bagian, dan Pasal menggunakan Regex.
+   - Untuk Pasal yang memiliki pembagian ayat, fungsi memanggil `_split_by_ayat`.
+   - Untuk Pasal yang berisi daftar/butir numerik tanpa ayat eksplisit, memanggil `_split_butir`.
+   - Huruf penomoran butir yang memakai alfabet (a., b., c.) juga dinormalisasi menjadi angka berurutan (1., 2., 3.) melalui `_normalize_letter_numbering` untuk konsistensi pembacaan oleh LLM.
+
+5. **`chunk_documents(documents: list) -> list`**
+   Fungsi ini mengambil dokumen teks lengkap (bersama dengan _context header_ di atasnya) dan membaginya menjadi unit-unit atomik (_chunk_) dengan memanggil fungsi `_parse_perdes_sections`. Tiap potongan teks kemudian dimasukkan ke dalam objek `Document` (dari ekosistem LangChain), dengan menyematkan berbagai atribut `metadata` (Bab, Pasal, Ayat, dll) yang nantinya akan disimpan di dalam Vector Database.
+
+6. **`save_results_to_folder(...)` dan `save_chunks_to_postgres(...)`**
+   - `save_results_to_folder`: Menyimpan hasil ekstraksi bersih (`_extracted.txt`) dan detail chunking (`_chunks.json`) ke penyimpanan lokal di direktori `data/processed/raw` atau `data/processed/distraktor`. Sangat berguna untuk keperluan _debugging_ atau verifikasi manual dari hasil ekstraksi.
+   - `save_chunks_to_postgres`: Menyimpan representasi teks _chunk_ beserta metadata JSON-nya ke database PostgreSQL pada tabel `chunks_perdes`. Berfungsi sebagai _backup_ data non-vektor atau untuk keperluan _full-text search_ tradisional.
+
+7. **`extract_and_chunk_pdf(...)`**
+   Fungsi _orchestrator_ utama yang dipanggil oleh API Layer. Fungsi ini menggabungkan seluruh alur yang dijabarkan di atas: mulai dari ekstraksi teks PDF (`extract_text_from_pdf`), pemotongan teks secara semantik (`chunk_documents`), hingga pemanggilan fungsi untuk menyimpan ke sistem file lokal maupun database relasional.
+
 ## B. Alur Chat / Tanya Jawab (Real-time)
 
 ```
@@ -452,6 +488,38 @@ Mode Opsional:
 | **Endpoint LLM**           | HuggingFace Router / Maia Router           | B200 RAFT Server (`/chat-raft`)            |
 | **Field Respons Tambahan** | —                                          | `"analysis"`, `"konteks_dipilih"`, `"konteks_ditolak"` (RAFT) |
 | **Chat History Konteks**   | ✅ Dikirim ke LLM (maks. 6 pesan)         | ❌ Tidak dikirim (RAFT stateless per-call) |
+
+### Penjelasan Rinci Modul `rag_service.py`
+
+Modul `rag_service.py` adalah jantung dari sistem tanya jawab dokumen hukum (RAG) ini. Modul ini bertugas mengorkestrasi seluruh tahapan mulai dari penerimaan kueri pengguna hingga pengembalian jawaban akhir beserta sumber referensinya. Berikut fungsi-fungsi krusial yang ada di dalamnya:
+
+1. **Inisialisasi Database & Embeddings**
+   Di bagian paling atas, modul menyiapkan klien Supabase (untuk berkomunikasi dengan _vector store_) dan model _embeddings_ `text-embedding-3-large` dari OpenAI via LangChain. Selain itu, terdapat kamus `AVAILABLE_MODELS` yang memetakan daftar semua LLM yang bisa digunakan, mencakup model Original (HuggingFace), OpenAI/OpenRouter, Google Gemini, hingga model RAFT *fine-tuned*.
+
+2. **`HuggingFaceService` & API Routing**
+   Kelas ini (beserta _instance_ global `hf_service`) bertindak sebagai _adapter_ universal yang menjembatani sistem RAG dengan berbagai endpoint API LLM:
+   - **`query()`**: Fungsi utama yang menyalurkan permintaan ke URL API yang sesuai berdasarkan tipe model (`"original"`, `"openai"`, atau `"raft"`). Khusus untuk model `"raft"`, payload disesuaikan untuk mengirim array `documents` secara langsung (tidak digabung menjadi string konteks tunggal) serta mengambil metadata evaluatif kembalian seperti _thought process_ (`analisis`), `konteks_dipilih`, dll.
+   - **`chat_with_context()`**: Mengkonstruksi _system prompt_ (yang saat ini dikonfigurasi rentan halusinasi secara disengaja untuk pengujian robustnes sistem RAG), menggabungkan _chat history_, dan memanggil fungsi `get_completion`. Khusus RAFT, konstruksi _system prompt_ ini sepenuhnya dilewati.
+
+3. **`rewrite_query_with_history(original_query, chat_history)`**
+   Sebuah fungsi pencegat (_interceptor_) untuk Tahap 0 (sebelum pencarian vektor). Fungsi ini membaca _chat history_ (maksimal 6 pesan sebelumnya) dan menggunakan model LLM kecil dan cepat (`gpt-3.5-turbo`) untuk merumuskan ulang pertanyaan lanjutan yang ambigu (misal: "lalu bagaimana hukum untuk hal itu?") menjadi kalimat pertanyaan utuh (_standalone query_) yang optimal digunakan untuk pencarian kemiripan di database vektor.
+
+4. **`_build_expanded_context_block(doc, adjacent_map)`**
+   Fungsi pembantu yang bertugas menenun informasi struktural dengan blok teks tetangganya (_adjacent chunk_). Fungsi ini menambahkan keterangan metadata secara rapi (Nama Desa, Nomor/Tahun, dll) dan menyematkan bagian teks penanda `[Konteks Sebelumnya]` dan `[Konteks Berikutnya]` agar LLM memperoleh pandangan utuh hierarki dokumen.
+
+5. **`evaluate_rag_answer(query, context, answer)` (LLM-as-a-Judge)**
+   Fungsi evaluasi _inline_ otomatis. Fungsi ini memanfaatkan agen `gpt-4o-mini` (dengan nilai `temperature=0.0`) untuk menilai kualitas jawaban secara seketika. Agen juri ini diminta memverifikasi apakah jawaban "Grounded" (benar bersumber dari teks) dan "Relevant", lalu mengembalikan skor serta alasannya dalam wujud JSON.
+
+6. **`_extract_final_answer(text: str)`**
+   Mekanisme keamanan ekstraksi teks (fallback) yang memotong proses _Chain-of-Thought_ panjang dari _output_ mentah LLM, dengan cara mencari penanda teks seperti `[JAWABAN AKHIR]` dan membuang teks internal-evaluasi sebelumnya, memastikan _user_ hanya melihat jawaban akhirnya saja.
+
+7. **`get_answer_from_rag(query, model_id, chat_history)` (Main Orchestrator)**
+   Fungsi inti (_entry point_) sistem pipeline RAG yang mengeksekusi seluruh alur dari hulu ke hilir:
+   - **Tahap 0**: Rewrite kueri (`rewrite_query_with_history`).
+   - **Tahap 1**: Pencarian _top-20_ dokumen awal secara cepat dengan Vector Search di Supabase.
+   - **Tahap 2**: Re-ranking _top-20_ menjadi _top-5_ yang sangat presisi menggunakan model Cross-Encoder MS Marco. Tahap ini juga mengevaluasi skor keyakinan (_Confidence Filter_ < -5.0) untuk _early exit_ jika dokumen sama sekali tidak nyambung dengan pertanyaan (pencegahan _hallucination_ mutlak).
+   - **Tahap 3**: _Adjacent Chunk Expansion_ (untuk memperluas konteks blok dokumen, walau kode saat ini sedang dinonaktifkan keras untuk uji komparasi).
+   - **Tahap 4 & 5**: Formatisasi data referensi (sumber hukum) dan pemanggilan model LLM. Hasil akhir (teks jawaban, _latency_, detail sumber hukum, dan hasil _judge_) disatukan dalam sebuah objek struktur JSON yang siap dikirim ke frontend via API.
 
 ---
 

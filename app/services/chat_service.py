@@ -38,7 +38,6 @@ def get_user_sessions(user_id: int):
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # Tambahkan 'evaluate' di dalam klausa SELECT
                 cur.execute("""
                     SELECT id, session_name, evaluate, created_at, updated_at 
                     FROM chat_sessions 
@@ -109,7 +108,6 @@ def get_session_history(session_id: int, limit: int = None):
                         ORDER BY created_at ASC
                     """, (session_id, limit))
                 else:
-                    # Ambil SEMUA history (untuk ditampilkan di frontend)
                     cur.execute("""
                         SELECT id, user_query, llm_response, created_at, faithfulness, answer_relevance, context_precision, context_recall, noise_sensitivity, semantic_similarity, metadata
                         FROM chat_history 
