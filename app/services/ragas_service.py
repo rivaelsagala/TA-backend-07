@@ -12,7 +12,8 @@ from ragas.metrics import (
     faithfulness,
     answer_relevancy,
     context_precision,
-    context_recall
+    context_recall,
+    answer_correctness
 )
 from dotenv import load_dotenv
 
@@ -139,9 +140,9 @@ class RagasEvaluationService:
        - Input: contexts + ground_truth (WAJIB diisi dengan jawaban pakar, bukan jawaban LLM)
        - Tinggi = konteks berhasil mencakup semua informasi penting dari referensi
        
-    5. Context Entity Recall (0-1): Mengukur seberapa banyak entitas penting dari ground truth ada di konteks
-       - Input: contexts + ground_truth (WAJIB diisi dengan jawaban pakar)
-       - Tinggi = entitas kunci (nama, pasal, dll) dari referensi ditemukan di konteks
+    5. Answer Correctness (0-1): Mengukur keakuratan faktual dan semantik jawaban terhadap ground truth
+       - Input: question + answer + ground_truth
+       - Tinggi = jawaban akurat sesuai acuan pakar
        
     """
     
@@ -173,6 +174,7 @@ class RagasEvaluationService:
             answer_relevancy,   
             context_precision,   
             context_recall,     
+            answer_correctness,
         ]
         
         logger.info("RAGAS Evaluation Service initialized with wrappers")
@@ -189,7 +191,7 @@ class RagasEvaluationService:
             if ground_truth is None:
                 logger.warning(
                     "'ground_truth' tidak diberikan. "
-                    "Metrik context_precision, context_recall, dan noise_sensitivity "
+                    "Metrik context_precision, context_recall, answer_correctness, dan noise_sensitivity "
                     "akan dilewati karena membutuhkan referensi jawaban pakar."
                 )
                 metrics_to_run = [faithfulness, answer_relevancy]
@@ -232,6 +234,7 @@ class RagasEvaluationService:
                 "answer_relevancy":  get_metric_val("answer_relevancy"),
                 "context_precision": get_metric_val("context_precision"),
                 "context_recall":    get_metric_val("context_recall"),
+                 "answer_correctness": get_metric_val("answer_correctness"),
             }
 
             if ground_truth is not None:
@@ -254,6 +257,7 @@ class RagasEvaluationService:
                 "answer_relevancy":  0,
                 "context_precision": 0,
                 "context_recall":    0,
+                "answer_correctness": 0,
                 "semantic_similarity": 0,
             }
     
