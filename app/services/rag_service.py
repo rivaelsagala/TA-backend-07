@@ -563,39 +563,22 @@ def get_answer_from_rag(query: str, model_id: int = 1, chat_history: List[Dict[s
         map_key = (doc_id, int(chunk_idx)) if doc_id and chunk_idx is not None else None
         adj = adjacent_map.get(map_key) if map_key else None
         
-        if not is_raft:
-            context_block = _build_expanded_context_block(doc, adjacent_map)
-            context_texts.append(context_block)
+        context_block = _build_expanded_context_block(doc, adjacent_map)
+        context_texts.append(context_block)
+        raw_doc_chunks.append(context_block)
 
-            sources.append({
-                "content": doc.page_content,
-                "expanded_content": context_block,
-                "neighbor_chunks": {
-                    "before": adj["before"] if adj else [],
-                    "after": adj["after"] if adj else [],   
-                },
-                "metadata": {
-                    "chunk_index": metadata.get("chunk_index"),
-                    "document_id": metadata.get("document_id")
-                }
-            })
-            raw_doc_chunks.append(doc.page_content)
-        else:
-            context_block = _build_expanded_context_block(doc, adjacent_map)
-            
-            sources.append({
-                "content": doc.page_content,
-                "expanded_content": context_block,
-                "neighbor_chunks": {
-                    "before": adj["before"] if adj else [],
-                    "after": adj["after"] if adj else [],
-                },
-                "metadata": {
-                    "chunk_index": metadata.get("chunk_index"),
-                    "document_id": metadata.get("document_id")
-                }
-            })
-            raw_doc_chunks.append(context_block)
+        sources.append({
+            "content": doc.page_content,
+            "expanded_content": context_block,
+            "neighbor_chunks": {
+                "before": adj["before"] if adj else [],
+                "after": adj["after"] if adj else [],   
+            },
+            "metadata": {
+                "chunk_index": metadata.get("chunk_index"),
+                "document_id": metadata.get("document_id")
+            }
+        })
     
     context_joined = "\n\n---\n\n".join(context_texts) if context_texts else ""
 
